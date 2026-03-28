@@ -15,6 +15,7 @@ SysMonitord - Linux系统安全监控守护程序
 - **纯净白名单模式**：初始状态建立完整的系统和文件白名单，后续仅监控增量变更
 - **智能过滤**：通过AI辅助判断，自动识别正常运维操作、代码发布、软件升级等行为
 - **低运维介入**：减少人工干预，通过CI/CD集成实现自动化确认
+- **集中审计**：所有监控日志统一推送至审计服务端，实现集中存储和分析
 
 ---
 
@@ -44,6 +45,10 @@ SysMonitord/
 │   ├── notifier/       # 通知模块
 │   │   ├── mail/       # 邮件发送
 │   │   └── ai/         # AI判断
+│   ├── audit/          # 审计推送模块
+│   │   ├── client/     # 审计客户端
+│   │   ├── buffer/     # 数据缓冲
+│   │   └── sender/     # 数据发送
 │   └── config/         # 配置管理
 ├── pkg/
 │   ├── utils/          # 工具函数
@@ -62,6 +67,7 @@ SysMonitord/
 | file_dubious.data | 可疑文件清单 | 路径:哈希:发现时间 |
 | process_dubious.data | 可疑进程清单 | 进程名:路径:发现时间 |
 | file_ignore.data | 例外文件/目录 | 每行一条规则 |
+| audit_buffer.data | 审计数据缓冲 | JSON格式 |
 | config.yaml | 配置文件 | YAML格式 |
 
 ---
@@ -91,6 +97,9 @@ func FirstStart() {
         }
         // 6. 统一存储文件白名单
         saveFileSystem()
+        
+        // 7. 记录审计日志
+        recordAuditLog("initial_scan", "completed", nil)
     }
 }
 ```
@@ -144,6 +153,12 @@ SysMonitord Status
   - 可疑文件: 23 个
   - 可疑进程: 5 个
 
+审计推送:
+  - 缓冲队列: 156 条
+  - 推送成功: 12,345 条
+  - 推送失败: 3 条
+  - 审计服务器: 10.2.x.x:8080 (已连接)
+
 最后扫描: 2024-01-15 10:30:25
 下次扫描: 2024-01-15 10:30:55
 
@@ -190,18 +205,101 @@ func ConfirmSafe(choice int) {
     case 1: // 文件安全
         appendToFileSystem(file_dubious.data)
         clearFile("file_dubious.data")
+        recordAuditLog("safe_confirm", "files_moved_to_whitelist", nil)
     case 2: // 进程安全
         appendToProcessSystem(process_dubious.data)
         clearFile("process_dubious.data")
+        recordAuditLog("safe_confirm", "processes_moved_to_whitelist", nil)
     case 3: // 全部安全
         appendToFileSystem(file_dubious.data)
         appendToProcessSystem(process_dubious.data)
         clearDubiousFiles()
+        recordAuditLog("safe_confirm", "all_moved_to_whitelist", nil)
     }
 }
 ```
 
-### 3.4 配置文件设计
+### 3.4 审计推送模块
+
+#### 3.4.1 审计数据类型
+
+审计模块负责将系统监控产生的各类日志实时或准实时推送到审计服务端，数据类型包括：
+
+| 审计类型 | 说明 | 触发时机 |
+|---------|------|---------|
+| system_start | 系统启动 | SysMonitord启动时 |
+| initial_scan | 初始扫描完成 | 首次全量扫描完成 |
+| file_change | 文件变更 | 检测到文件新增/修改/删除 |
+| process_change | 进程变更 | 检测到新增进程 |
+| dubious_file | 可疑文件 | 文件被标记为可疑 |
+| dubious_process | 可疑进程 | 进程被标记为可疑 |
+| safe_confirm | 安全确认 | 执行safe命令确认 |
+| alert_sent | 告警发送 | 邮件告警发送后 |
+| ai_judgment | AI判断 | AI分析完成后 |
+| scan_progress | 扫描进度 | 周期性扫描状态 |
+| error_occurred | 错误发生 | 系统运行错误 |
+
+#### 3.4.2 审计数据格式
+
+每条审计数据采用统一的JSON格式：
+
+```json
+{
+  "timestamp": 1705315200,
+  "server_id": "hostname-123",
+  "server_ip": "10.0.0.1",
+  "audit_type": "file_change",
+  "data": {
+    "path": "/etc/nginx/nginx.conf",
+    "hash": "3a7b8c9d1e2f3a4b5c6d7e8f9a0b1c2d",
+    "action": "modify",
+    "size": 4096,
+    "owner": "root",
+    "group": "root",
+    "mode": "0644"
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "product": "kunas"
+  }
+}
+```
+
+#### 3.4.3 推送机制
+
+**缓冲策略**：
+- 内存缓冲：优先写入内存队列（容量10000条）
+- 磁盘缓冲：内存满时持久化到audit_buffer.data
+- 定时刷新：每5秒或达到1000条时推送
+
+**重试机制**：
+```go
+type AuditSender struct {
+    buffer      chan AuditData
+    retryQueue  []AuditData
+    maxRetries  int
+    retryDelay  time.Duration
+}
+
+func (s *AuditSender) Send(data AuditData) error {
+    for i := 0; i < s.maxRetries; i++ {
+        if err := s.doSend(data); err == nil {
+            return nil
+        }
+        time.Sleep(s.retryDelay)
+    }
+    // 推送失败，持久化到磁盘
+    s.persistToDisk(data)
+    return fmt.Errorf("send failed after %d retries", s.maxRetries)
+}
+```
+
+**增量同步**：
+- 支持断点续传，记录最后成功推送的审计ID
+- 重新连接后自动补齐未推送数据
+- 推送失败的数据保留30天
+
+### 3.5 配置文件设计
 
 ```yaml
 # /etc/sysmonitord/config.yaml
@@ -217,7 +315,7 @@ notification:
       server: smtp.example.com
       port: 587
       user: sysmonitord@example.com
-      password: ${SMTP_PASSWORD}  # 从环境变量读取
+      password: ${SMTP_PASSWORD}
   webhook:
     enabled: false
     url: https://your-webhook.com/alert
@@ -227,14 +325,27 @@ ai:
   enabled: true
   api_url: https://api.openai.com/v1/chat/completions
   model: gpt-3.5-turbo
-  threshold: 0.85  # 置信度阈值
+  threshold: 0.85
 
-# 审计服务器
+# 审计服务器配置
 audit:
   enabled: true
   product: kunas
   server: 10.2.x.x
   port: 8080
+  protocol: https
+  timeout: 30
+  buffer_size: 1000
+  flush_interval: 5
+  max_retries: 3
+  retry_delay: 5
+  # 可选：认证配置
+  auth:
+    type: token
+    token: ${AUDIT_TOKEN}
+    # 或使用证书认证
+    # cert_file: /etc/sysmonitord/client.crt
+    # key_file: /etc/sysmonitord/client.key
 
 # 扫描配置
 scanner:
@@ -243,11 +354,11 @@ scanner:
       - /proc/
       - /sys/
       - /dev/
-      - /tmp/     # 临时目录暂不监控（待优化）
-    max_file_size: 100MB  # 超过此大小的文件不计算hash
+      - /tmp/
+    max_file_size: 100MB
     hash_algorithm: sha256
   process:
-    scan_interval: 30  # 秒
+    scan_interval: 30
     exclude_processes:
       - kthreadd
       - migration
@@ -265,6 +376,46 @@ watcher:
     - "*.log"
     - "*.cache"
     - "*.tmp"
+```
+
+### 3.6 审计数据记录示例
+
+```go
+type AuditRecorder struct {
+    sender *AuditSender
+    config *AuditConfig
+}
+
+func (r *AuditRecorder) Record(auditType string, data interface{}) {
+    auditData := AuditData{
+        Timestamp: time.Now().Unix(),
+        ServerID:  getServerID(),
+        ServerIP:  getServerIP(),
+        AuditType: auditType,
+        Data:      data,
+        Metadata: Metadata{
+            Version: Version,
+            Product: r.config.Product,
+        },
+    }
+    
+    // 异步推送，不阻塞主流程
+    go r.sender.Send(auditData)
+}
+
+// 使用示例
+func OnFileDetected(file FileInfo) {
+    // 记录到审计
+    auditRecorder.Record("dubious_file", map[string]interface{}{
+        "path": file.Path,
+        "hash": file.Hash,
+        "size": file.Size,
+        "discovered_at": time.Now(),
+    })
+    
+    // 其他处理逻辑
+    addToDubiousFile(file)
+}
 ```
 
 ---
@@ -289,19 +440,27 @@ watcher:
 - [ ] 异常检测算法
 - [ ] 去重告警机制
 
-### Phase 4: 通知与AI（第7-8周）
+### Phase 4: 审计推送（第7周）
+- [ ] 审计数据模型定义
+- [ ] 审计记录接口
+- [ ] 内存缓冲队列
+- [ ] 磁盘持久化
+- [ ] HTTP/HTTPS推送客户端
+- [ ] 重试机制
+- [ ] 断点续传
+
+### Phase 5: 通知与AI（第8周）
 - [ ] 邮件发送模块
-- [ ] AI判断集成（OpenAI API）
-- [ ] 审计服务器上报
+- [ ] AI判断集成
 - [ ] 告警模板
 
-### Phase 5: 交互与安装（第9周）
+### Phase 6: 交互与安装（第9周）
 - [ ] safe命令交互界面
 - [ ] status命令状态展示
 - [ ] 安装脚本
 - [ ] systemd服务配置
 
-### Phase 6: 测试与优化（第10周）
+### Phase 7: 测试与优化（第10周）
 - [ ] 单元测试
 - [ ] 集成测试
 - [ ] 性能优化
@@ -316,11 +475,9 @@ watcher:
 **大文件处理策略**：
 ```go
 func ShouldHashFile(file os.FileInfo) bool {
-    // 跳过超大文件
     if file.Size() > 100*1024*1024 {
         return false
     }
-    // 跳过特定类型
     ext := filepath.Ext(file.Name())
     skipExts := []string{".mp4", ".avi", ".iso", ".tar"}
     if contains(skipExts, ext) {
@@ -335,6 +492,11 @@ func ShouldHashFile(file os.FileInfo) bool {
 - 分批处理，每1000条flush一次
 - 使用mmap映射大文件
 
+**审计推送优化**：
+- 批量推送，减少网络开销
+- 压缩传输（gzip）
+- 异步非阻塞设计
+
 ### 5.2 AI判断集成
 
 ```go
@@ -347,7 +509,6 @@ func (a *AIAnalyzer) Analyze(changes []Change) (bool, string) {
     prompt := buildPrompt(changes)
     response := a.client.ChatCompletion(prompt)
     
-    // 解析AI响应
     if response.Confidence > 0.85 {
         return true, response.Reason
     }
@@ -362,13 +523,14 @@ func (a *AIAnalyzer) Analyze(changes []Change) (bool, string) {
 # 部署脚本示例
 #!/bin/bash
 
-# 部署新代码
 git pull
 systemctl restart myapp
 
 # 自动确认文件安全
 sysmonitord safe --auto --file /opt/myapp/config/*.conf
 sysmonitord safe --auto --process myapp
+
+# 审计推送会自动记录这些确认操作
 ```
 
 ### 5.4 systemd服务配置
@@ -417,6 +579,13 @@ nginx:/usr/sbin/nginx:4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e
 /etc/nginx/nginx.conf  # 只忽略特定文件
 ```
 
+### 6.4 audit_buffer.data格式
+```
+# 审计数据缓冲文件，每行一个JSON
+{"timestamp":1705315200,"server_id":"host-1","audit_type":"file_change","data":{...}}
+{"timestamp":1705315201,"server_id":"host-1","audit_type":"process_change","data":{...}}
+```
+
 ---
 
 ## 七、安装与部署
@@ -463,7 +632,9 @@ systemctl daemon-reload
 
 # 提示配置
 echo "SysMonitord installed successfully!"
-echo "Please edit /etc/sysmonitord/config.yaml to configure email and AI settings"
+echo "Please edit /etc/sysmonitord/config.yaml to configure:"
+echo "  - Email and AI settings"
+echo "  - Audit server address"
 echo "Then run: systemctl start sysmonitord"
 
 # 清理
@@ -491,21 +662,26 @@ sudo ./install.sh
 - 文件过滤规则
 - 配置解析
 - 数据序列化
+- 审计数据格式化
 
 ### 8.2 集成测试
 - 完整扫描流程
 - 监控触发机制
 - 邮件发送
 - AI判断集成
+- 审计推送完整链路
 
 ### 8.3 性能测试
 - 10万文件扫描时间
 - 内存占用
 - CPU使用率
 - 磁盘I/O
+- 审计推送吞吐量
 
 ### 8.4 稳定性测试
 - 7x24小时运行
+- 网络中断恢复
+- 审计服务器不可用时的缓冲能力
 - 异常恢复
 - 资源泄漏检测
 
@@ -523,18 +699,24 @@ sudo ./install.sh
    - 并行哈希计算
    - 增量扫描
 
-3. **增强监控**
+3. **审计增强**
+   - 审计数据压缩传输
+   - 审计数据加密
+   - 审计数据本地归档
+   - 审计数据脱敏
+
+4. **增强监控**
    - /tmp目录执行监控
    - 批量文件修改检测
    - Bash子进程检测
    - 系统日志关联分析
 
-4. **安全增强**
+5. **安全增强**
    - 进程hook保障
    - 自我保护机制
    - 完整性校验
 
-5. **智能告警**
+6. **智能告警**
    - AI模型训练（基于历史数据）
    - 异常行为模式识别
    - 自动化响应
@@ -552,7 +734,7 @@ sudo ./install.sh
 ### 10.2 Git规范
 - 分支策略：main（稳定版）/ develop（开发版）/ feature/*（功能分支）
 - Commit信息格式：`[模块] 简短描述`
-- 示例：`[scanner] 添加文件哈希计算并发支持`
+- 示例：`[audit] 添加审计推送重试机制`
 
 ### 10.3 版本规范
 - 使用语义化版本：v主版本.次版本.修订号
@@ -568,6 +750,7 @@ sudo ./install.sh
 - [ ] INSTALL.md - 安装指南
 - [ ] CONFIG.md - 配置说明
 - [ ] API.md - API文档（如有）
+- [ ] AUDIT.md - 审计数据格式说明
 - [ ] TROUBLESHOOTING.md - 故障排查
 - [ ] DEVELOPMENT.md - 开发指南
 
@@ -579,7 +762,7 @@ sudo ./install.sh
 # 启动监控
 sysmonitord start
 
-# 查看状态
+# 查看状态（包含审计推送状态）
 sysmonitord status
 
 # 安全确认
@@ -589,15 +772,19 @@ sysmonitord safe
 sysmonitord safe --auto --file /path/to/file
 sysmonitord safe --auto --process process_name
 
+# 查看审计缓冲状态
+sysmonitord audit status
+
+# 手动刷新审计缓冲
+sysmonitord audit flush
+
 # 查看日志
 journalctl -u sysmonitord -f
 tail -f /var/log/sysmonitord/monitor.log
-
-# 重启服务
-systemctl restart sysmonitord
+tail -f /var/log/sysmonitord/audit.log
 ```
 
 ---
 
-**文档版本**: v1.0  
-**最后更新**: 2026-03-28  
+**文档版本**: v1.0.1
+**最后更新**: 2025-03-28
