@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sysmonitord/internal/config"
+	"sysmonitord/internal/scanner/process"
 	"sysmonitord/pkg/logger"
 
 	"github.com/spf13/cobra"
@@ -26,6 +27,26 @@ var StartCmd = &cobra.Command{
 		logger.Log.Info("配置文件加载成功",
 			zap.String("审计服务器地址", fmt.Sprintf("%s:%d", cfg.Audit.Server, cfg.Audit.Port)),
 		)
-		// Todo: 初始化扫描
+
+		procs, err := process.ScanAllProcesses()
+		if err != nil {
+			logger.Log.Error("扫描进程失败", zap.Error(err))
+			os.Exit(1)
+		}
+
+		logger.Log.Info("进程列表：")
+		for i, p := range procs {
+			if i >= 10 {
+				logger.Log.Info("... (仅显示前10个进程)")
+				break
+			}
+			logger.Log.Info(
+				"进程信息",
+				zap.Int32("pid", p.PID),
+				zap.String("name", p.Name),
+				zap.String("path", p.Path),
+				zap.String("cmdline", p.Cmdline),
+			)
+		}
 	},
 }
