@@ -1,14 +1,18 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"sysmonitord/cmd/start"
+	"sysmonitord/pkg/logger"
 
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 func main() {
+	logger.InitLogger()
+	defer logger.Sync()
+
 	var rootCmd = &cobra.Command{
 		Use:   "sysmonitord",
 		Short: "Sysmonitord 是一个 Linux 系统安全监控工具",
@@ -17,7 +21,7 @@ func main() {
 	rootCmd.AddCommand(start.StartCmd)
 
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		logger.Log.Error("命令执行失败", zap.Error(err))
 		os.Exit(1)
 	}
 }
