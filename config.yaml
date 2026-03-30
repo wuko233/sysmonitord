@@ -10,6 +10,9 @@ audit:
 
 scanner:
   file:
-  exclude_paths:
-    - /proc
-    - /sys
+    exclude_paths:
+      - /proc
+      - /sys
+    fast_hash: true
+    fast_hash_size: 100MB
+    fast_hash_chunk: 2MB

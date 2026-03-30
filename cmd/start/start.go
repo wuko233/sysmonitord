@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sysmonitord/internal/config"
+	"sysmonitord/internal/scanner/hash"
 	"sysmonitord/internal/scanner/process"
 	"sysmonitord/pkg/logger"
 
@@ -28,7 +29,13 @@ var StartCmd = &cobra.Command{
 			zap.String("审计服务器地址", fmt.Sprintf("%s:%d", cfg.Audit.Server, cfg.Audit.Port)),
 		)
 
-		procs, err := process.ScanAllProcesses()
+		hashCfg := &hash.Config{
+			UseFastHash: cfg.Scanner.File.FastHash,
+			Threshold:   cfg.Scanner.File.FastHashSize,
+			ChunkSize:   cfg.Scanner.File.FastHashChunk,
+		}
+
+		procs, err := process.ScanAllProcesses(hashCfg)
 		if err != nil {
 			logger.Log.Error("扫描进程失败", zap.Error(err))
 			os.Exit(1)
@@ -46,6 +53,7 @@ var StartCmd = &cobra.Command{
 				zap.String("name", p.Name),
 				zap.String("path", p.Path),
 				zap.String("cmdline", p.Cmdline),
+				zap.Stringer("data", p),
 			)
 		}
 	},

@@ -2,6 +2,8 @@ package process
 
 import (
 	"fmt"
+	"os"
+	"sysmonitord/internal/scanner/hash"
 	"sysmonitord/pkg/logger"
 
 	"github.com/shirou/gopsutil/v3/process"
@@ -9,13 +11,14 @@ import (
 )
 
 type ProcessInfo struct {
-	PID     int32  `json:"pid"`
-	Name    string `json:"name"`
-	Path    string `json:"path"`
-	Cmdline string `json:"cmdline"`
+	PID      int32  `json:"pid"`
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	Cmdline  string `json:"cmdline"`
+	FileHash string `json:"file_hash"`
 }
 
-func ScanAllProcesses() ([]ProcessInfo, error) {
+func ScanAllProcesses(hashCfg *hash.Config) ([]ProcessInfo, error) {
 	logger.Log.Info("[scan]正在扫描系统中的所有进程...")
 
 	pids, err := process.Pids()
@@ -52,6 +55,18 @@ func ScanAllProcesses() ([]ProcessInfo, error) {
 			Path:    exePath,
 			Cmdline: cmdline,
 		}
+
+		if exePath != "" {
+			if _, err := os.Stat(exePath); err == nil {
+				fileHash, err := hash.SHA256(exePath, hashCfg)
+				if err == nil {
+					info.FileHash = fileHash
+				} else {
+					logger.Log.Warn("[scan]计算文件哈希失败", zap.String("path", exePath), zap.Error(err))
+				}
+			}
+		}
+
 		processList = append(processList, info)
 	}
 
@@ -60,7 +75,5 @@ func ScanAllProcesses() ([]ProcessInfo, error) {
 }
 
 func (p ProcessInfo) String() string {
-	return fmt.Sprintf("%s:%s:%d", p.Name, p.Path, p.PID)
-
-	// Todo: 哈希计算
+	return fmt.Sprintf("%s:%s:%s", p.Name, p.Path, p.FileHash)
 }

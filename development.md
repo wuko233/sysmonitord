@@ -355,7 +355,9 @@ scanner:
       - /sys/
       - /dev/
       - /tmp/
-    max_file_size: 100MB
+    fast_hash: true
+    fast_hash_size: 100MB
+    fast_hash_chunk: 2MB
     hash_algorithm: sha256
   process:
     scan_interval: 30
@@ -551,6 +553,20 @@ LimitNOFILE=65536
 [Install]
 WantedBy=multi-user.target
 ```
+
+### 5.5 分层抽样哈希策略
+
+针对大文件（默认 >100MB）的哈希计算，为避免I/O阻塞，采用分层抽样算法：
+
+**算法逻辑**：
+1. 读取文件头部 N 字节（默认 1MB）。
+2. 读取文件尾部 N 字节（默认 1MB）。
+3. 获取文件总大小 Size。
+4. 拼接：`Head + Tail + Size`，对拼接后的数据进行 SHA256 运算。
+
+**优势**：
+- **性能**：将 GB 级文件的哈希耗时从秒级降至毫秒级。
+- **安全性**：任何对文件内容的修改，极大概率会触碰到头部（文件头结构）或尾部（数据填充），且锁定文件大小，有效检测篡改行为。
 
 ---
 
