@@ -6,6 +6,7 @@ import (
 	"sysmonitord/internal/config"
 	"sysmonitord/internal/scanner/hash"
 	"sysmonitord/internal/scanner/process"
+	"sysmonitord/internal/storage"
 	"sysmonitord/pkg/logger"
 
 	"github.com/spf13/cobra"
@@ -35,10 +36,20 @@ var StartCmd = &cobra.Command{
 			ChunkSize:   cfg.Scanner.File.FastHashChunk,
 		}
 
+		storageCfg := &storage.Storage{
+			DataDir:           cfg.Storage.DataDir,
+			ProcessSystemFile: cfg.Storage.ProcessSystemFile,
+			FileSystemFile:    cfg.Storage.FileSystemFile,
+		}
+
 		procs, err := process.ScanAllProcesses(hashCfg)
 		if err != nil {
 			logger.Log.Error("扫描进程失败", zap.Error(err))
 			os.Exit(1)
+		} else {
+			if err := storage.SaveProcessSystem(procs, storageCfg.DataDir, storageCfg.ProcessSystemFile); err != nil {
+				logger.Log.Error("保存进程白名单失败", zap.Error(err))
+			}
 		}
 
 		logger.Log.Info("进程列表：")

@@ -12,6 +12,7 @@ import (
 type Config struct {
 	Audit   AuditConfig   `yaml:"audit"`
 	Scanner ScannerConfig `yaml:"scanner"`
+	Storage StorageConfig `yaml:"storage"`
 }
 
 type AuditConfig struct {
@@ -23,6 +24,12 @@ type AuditConfig struct {
 
 type ScannerConfig struct {
 	File FileScannerConfig `yaml:"file"`
+}
+
+type StorageConfig struct {
+	DataDir           string `yaml:"data_dir"`
+	ProcessSystemFile string `yaml:"process_system_file"`
+	FileSystemFile    string `yaml:"file_system_file"`
 }
 
 type FileScannerConfig struct {
