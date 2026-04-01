@@ -24,6 +24,11 @@ type AuditConfig struct {
 
 type ScannerConfig struct {
 	File FileScannerConfig `yaml:"file"`
+	Hash hashConfig        `yaml:"hash"`
+}
+
+type hashConfig struct {
+	Algorithm string `yaml:"algorithm"`
 }
 
 type StorageConfig struct {

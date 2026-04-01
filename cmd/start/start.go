@@ -76,15 +76,8 @@ var StartCmd = &cobra.Command{
 		logger.Log.Info("正在扫描文件系统...")
 
 		startTime := time.Now()
-		fileCfg := &config.FileScannerConfig{
-			IncludePaths:  cfg.Scanner.File.IncludePaths,
-			ExcludePaths:  cfg.Scanner.File.ExcludePaths,
-			FastHash:      cfg.Scanner.File.FastHash,
-			FastHashSize:  cfg.Scanner.File.FastHashSize,
-			FastHashChunk: cfg.Scanner.File.FastHashChunk,
-		}
+		fileScanner := file.NewScanner(cfg)
 
-		fileScanner := file.NewScanner(fileCfg)
 		files, err := fileScanner.Scan()
 		if err != nil {
 			logger.Log.Error("扫描文件系统失败", zap.Error(err))

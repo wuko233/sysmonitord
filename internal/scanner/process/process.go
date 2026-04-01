@@ -58,7 +58,7 @@ func ScanAllProcesses(hashCfg *hash.Config) ([]ProcessInfo, error) {
 
 		if exePath != "" {
 			if _, err := os.Stat(exePath); err == nil {
-				fileHash, err := hash.SHA256(exePath, hashCfg)
+				fileHash, err := hash.CalculateHash(exePath, hashCfg)
 				if err == nil {
 					info.FileHash = fileHash
 				} else {

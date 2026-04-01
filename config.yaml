@@ -9,6 +9,9 @@ audit:
   buffer_size: 1000
 
 scanner:
+  hash:
+    # algorithm: "sha256"
+    algorithm: "md5"
   file:
     include_paths:
       - /home

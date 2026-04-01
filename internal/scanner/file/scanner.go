@@ -21,17 +21,17 @@ type FileInfo struct {
 }
 
 type Scanner struct {
-	cfg *config.FileScannerConfig
+	cfg *config.Config
 }
 
-func NewScanner(cfg *config.FileScannerConfig) *Scanner {
+func NewScanner(cfg *config.Config) *Scanner {
 	return &Scanner{
 		cfg: cfg,
 	}
 }
 
 func (s *Scanner) Scan() ([]FileInfo, error) {
-	targetPaths := s.cfg.IncludePaths
+	targetPaths := s.cfg.Scanner.File.IncludePaths
 	if len(targetPaths) == 0 {
 		targetPaths = []string{"/"}
 	}
@@ -65,10 +65,10 @@ func (s *Scanner) WalkFunc(result *[]FileInfo) fs.WalkDirFunc {
 			return nil
 		}
 
-		for _, exclude := range s.cfg.ExcludePaths {
+		for _, exclude := range s.cfg.Scanner.File.ExcludePaths {
 			if strings.HasPrefix(path, exclude) {
 				logger.Log.Debug("[scan]跳过路径", zap.String("path", path), zap.String("reason", "匹配排除路径"))
-				return fs.SkipDir
+				return nil
 			}
 		}
 
@@ -78,13 +78,14 @@ func (s *Scanner) WalkFunc(result *[]FileInfo) fs.WalkDirFunc {
 			return nil
 		}
 
-		if info.Size() != 0 {
-			hash, err := hash.SHA256(path, &hash.Config{
-				UseFastHash: s.cfg.FastHash,
-				Threshold:   s.cfg.FastHashSize,
-				ChunkSize:   s.cfg.FastHashChunk,
-			})
+		if info.Size() > 0 {
+			hashCfg, err := s.cfg.GetHashConfig()
+			if err != nil {
+				logger.Log.Debug("[scan]无法获取哈希配置", zap.String("path", path), zap.Error(err))
+				return nil
+			}
 
+			hash, err := hash.CalculateHash(path, hashCfg)
 			if err != nil {
 				logger.Log.Debug("[scan]无法计算文件哈希", zap.String("path", path), zap.Error(err))
 				return nil

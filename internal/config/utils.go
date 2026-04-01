@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"sysmonitord/internal/scanner/hash"
 )
 
 func ParseSize(sizeStr string) (int64, error) {
@@ -43,4 +45,35 @@ func ParseSize(sizeStr string) (int64, error) {
 	}
 
 	return value * multiplier, nil
+}
+
+func (c *Config) GetHashAlgorithm() (hash.HashAlgorithm, error) {
+	algoName := c.Scanner.Hash.Algorithm
+
+	switch strings.ToLower(algoName) {
+	case "sha256":
+		return &hash.SHA256Algorithm{}, nil
+	case "md5":
+		return &hash.MD5Algorithm{}, nil
+	default:
+		return nil, fmt.Errorf("不支持的哈希算法: %s", algoName)
+	}
+}
+
+func (c *Config) GetFileScannerConfig() (*FileScannerConfig, error) {
+	return &c.Scanner.File, nil
+}
+
+func (c *Config) GetHashConfig() (*hash.Config, error) {
+	algo, err := c.GetHashAlgorithm()
+	if err != nil {
+		return nil, err
+	}
+
+	return &hash.Config{
+		UseFastHash: c.Scanner.File.FastHash,
+		Threshold:   c.Scanner.File.FastHashSize,
+		ChunkSize:   c.Scanner.File.FastHashChunk,
+		Algorithm:   algo,
+	}, nil
 }
