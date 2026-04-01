@@ -41,6 +41,12 @@ var StartCmd = &cobra.Command{
 
 		startTime := time.Now()
 		procs, err := process.ScanAllProcesses(cfg)
+
+		logger.Log.Info("进程扫描完成",
+			zap.Int("进程数量", len(procs)),
+			zap.Duration("扫描耗时", time.Since(startTime)),
+		)
+
 		if err != nil {
 			logger.Log.Error("扫描进程失败", zap.Error(err))
 			os.Exit(1)
