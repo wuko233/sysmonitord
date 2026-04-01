@@ -10,6 +10,7 @@ import (
 	"os"
 	"sysmonitord/pkg/logger"
 
+	"github.com/cespare/xxhash/v2"
 	"go.uber.org/zap"
 )
 
@@ -44,7 +45,59 @@ func (a *MD5Algorithm) Name() string {
 
 // ==== xxHash64 ====
 
-// Todo: 添加 xxHash64 实现
+type XXHash64Algorithm struct{}
+
+func (a *XXHash64Algorithm) Hash() hash.Hash {
+	return &xxHash64Wrapper{
+		xxhash: xxhash.New(),
+	}
+}
+
+func (a *XXHash64Algorithm) Name() string {
+	return "xxhash64"
+}
+
+type xxHash64Wrapper struct {
+	xxhash *xxhash.Digest
+}
+
+func (w *xxHash64Wrapper) Write(p []byte) (n int, err error) {
+	return w.xxhash.Write(p)
+}
+
+// Sum 返回当前哈希值，追加到 b 后面
+// xxHash64 返回 8 字节的哈希值（小端序）
+func (w *xxHash64Wrapper) Sum(b []byte) []byte {
+	// 获取当前的 64 位哈希值
+	h := w.xxhash.Sum64()
+
+	// 将 uint64 转换为 8 字节的小端序字节数组
+	buf := make([]byte, 8)
+	binary.LittleEndian.PutUint64(buf, h)
+
+	// 追加到输入的 b 后面
+	return append(b, buf...)
+}
+
+// Reset 重置哈希状态
+func (w *xxHash64Wrapper) Reset() {
+	w.xxhash.Reset()
+}
+
+// Size 返回哈希值的字节数
+func (w *xxHash64Wrapper) Size() int {
+	return 8 // xxHash64 输出 64 位 = 8 字节
+}
+
+// BlockSize 返回底层哈希的块大小
+func (w *xxHash64Wrapper) BlockSize() int {
+	return w.xxhash.BlockSize()
+}
+
+// Sum64 提供直接获取 uint64 的便捷方法
+func (w *xxHash64Wrapper) Sum64() uint64 {
+	return w.xxhash.Sum64()
+}
 
 // ==== 配置结构体 ====
 

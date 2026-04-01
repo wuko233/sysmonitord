@@ -91,6 +91,8 @@ func (c *Config) GetHashAlgorithm() (hash.HashAlgorithm, error) {
 		return &hash.SHA256Algorithm{}, nil
 	case "md5":
 		return &hash.MD5Algorithm{}, nil
+	case "xxhash64":
+		return &hash.XXHash64Algorithm{}, nil
 	default:
 		return nil, fmt.Errorf("不支持的哈希算法: %s", algoName)
 	}

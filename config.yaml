@@ -11,10 +11,11 @@ audit:
 scanner:
   hash:
     # algorithm: "sha256"
-    algorithm: "md5"
+    # algorithm: "md5"
+    algorithm: "xxhash64"
   file:
     include_paths:
-      - /home
+      - /home/wuko233/Downloads
     exclude_paths:
       - /proc
       - /sys
