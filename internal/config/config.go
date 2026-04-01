@@ -33,6 +33,7 @@ type StorageConfig struct {
 }
 
 type FileScannerConfig struct {
+	IncludePaths     []string `yaml:"include_paths"`
 	ExcludePaths     []string `yaml:"exclude_paths"`
 	FastHash         bool     `yaml:"fast_hash"`
 	FastHashSizeRaw  string   `yaml:"fast_hash_size"`

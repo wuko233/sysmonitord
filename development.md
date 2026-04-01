@@ -350,6 +350,8 @@ audit:
 # 扫描配置
 scanner:
   file:
+    include_paths:
+        - /
     exclude_paths:
       - /proc/
       - /sys/

@@ -10,6 +10,8 @@ audit:
 
 scanner:
   file:
+    include_paths:
+      - /home
     exclude_paths:
       - /proc
       - /sys
