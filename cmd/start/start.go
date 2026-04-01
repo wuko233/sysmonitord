@@ -5,7 +5,6 @@ import (
 	"os"
 	"sysmonitord/internal/config"
 	"sysmonitord/internal/scanner/file"
-	"sysmonitord/internal/scanner/hash"
 	"sysmonitord/internal/scanner/process"
 	"sysmonitord/internal/storage"
 	"sysmonitord/pkg/logger"
@@ -32,12 +31,6 @@ var StartCmd = &cobra.Command{
 			zap.String("审计服务器地址", fmt.Sprintf("%s:%d", cfg.Audit.Server, cfg.Audit.Port)),
 		)
 
-		hashCfg := &hash.Config{
-			UseFastHash: cfg.Scanner.File.FastHash,
-			Threshold:   cfg.Scanner.File.FastHashSize,
-			ChunkSize:   cfg.Scanner.File.FastHashChunk,
-		}
-
 		storageCfg := &storage.Storage{
 			DataDir:           cfg.Storage.DataDir,
 			ProcessSystemFile: cfg.Storage.ProcessSystemFile,
@@ -46,7 +39,8 @@ var StartCmd = &cobra.Command{
 
 		// ====== 进程扫描和存储 ======
 
-		procs, err := process.ScanAllProcesses(hashCfg)
+		startTime := time.Now()
+		procs, err := process.ScanAllProcesses(cfg)
 		if err != nil {
 			logger.Log.Error("扫描进程失败", zap.Error(err))
 			os.Exit(1)
@@ -75,7 +69,7 @@ var StartCmd = &cobra.Command{
 		// ====== 文件扫描和存储 ======
 		logger.Log.Info("正在扫描文件系统...")
 
-		startTime := time.Now()
+		startTime = time.Now()
 		fileScanner := file.NewScanner(cfg)
 
 		files, err := fileScanner.Scan()

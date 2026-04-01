@@ -56,34 +56,33 @@ type Config struct {
 }
 
 // ==== 计算文件哈希 ====
-
-func CalculateHash(filePath string, cfg *Config) (string, error) {
-	info, err := os.Stat(filePath)
-	if err != nil {
-		logger.Log.Warn("[hash]获取文件信息失败", zap.String("path", filePath), zap.Error(err))
-		return "", err
+func Calculate(filePath string, fileSize int64, cfg *Config) (string, error) {
+	if cfg == nil {
+		cfg = &Config{
+			Algorithm: &SHA256Algorithm{},
+		}
 	}
 
-	fileSize := info.Size()
+	if fileSize == 0 {
+		info, err := os.Stat(filePath)
+		if err != nil {
+			logger.Log.Warn("[scanner]获取文件信息失败", zap.String("path", filePath), zap.Error(err))
+			return "", err
+		}
+		fileSize = info.Size()
+	}
 
 	if cfg.Algorithm == nil {
 		cfg.Algorithm = &SHA256Algorithm{}
 	}
 
-	logger.Log.Debug("[hash]计算文件哈希",
-		zap.String("path", filePath),
-		zap.Int64("fileSize", fileSize),
-		zap.String("Algorithm", cfg.Algorithm.Name()))
+	logger.Log.Debug("[scanner]计算文件哈希", zap.String("path", filePath), zap.Int64("size", fileSize), zap.String("algorithm", cfg.Algorithm.Name()))
 
 	if cfg.UseFastHash && fileSize > cfg.Threshold {
-		logger.Log.Debug("[hash] 分层哈希...",
-			zap.String("path", filePath),
-			zap.Int64("fileSize", fileSize),
-		)
 		return calculateFast(filePath, fileSize, cfg)
+	} else {
+		return calculateFull(filePath, cfg)
 	}
-
-	return calculateFull(filePath, cfg)
 }
 
 func calculateFull(filePath string, cfg *Config) (string, error) {

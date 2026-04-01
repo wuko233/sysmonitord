@@ -85,7 +85,7 @@ func (s *Scanner) WalkFunc(result *[]FileInfo) fs.WalkDirFunc {
 				return nil
 			}
 
-			hash, err := hash.CalculateHash(path, hashCfg)
+			hash, err := hash.Calculate(path, info.Size(), hashCfg)
 			if err != nil {
 				logger.Log.Debug("[scan]无法计算文件哈希", zap.String("path", path), zap.Error(err))
 				return nil

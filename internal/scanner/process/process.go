@@ -3,6 +3,7 @@ package process
 import (
 	"fmt"
 	"os"
+	"sysmonitord/internal/config"
 	"sysmonitord/internal/scanner/hash"
 	"sysmonitord/pkg/logger"
 
@@ -18,7 +19,7 @@ type ProcessInfo struct {
 	FileHash string `json:"file_hash"`
 }
 
-func ScanAllProcesses(hashCfg *hash.Config) ([]ProcessInfo, error) {
+func ScanAllProcesses(cfg *config.Config) ([]ProcessInfo, error) {
 	logger.Log.Info("[scan]正在扫描系统中的所有进程...")
 
 	pids, err := process.Pids()
@@ -28,6 +29,13 @@ func ScanAllProcesses(hashCfg *hash.Config) ([]ProcessInfo, error) {
 	}
 
 	var processList []ProcessInfo
+
+	hashCfg, err := cfg.GetHashConfig()
+	if err != nil {
+		logger.Log.Error("[scan]获取哈希配置失败", zap.Error(err))
+		return nil, err
+	}
+
 	for _, pid := range pids {
 		p, err := process.NewProcess(pid)
 		if err != nil {
@@ -58,7 +66,7 @@ func ScanAllProcesses(hashCfg *hash.Config) ([]ProcessInfo, error) {
 
 		if exePath != "" {
 			if _, err := os.Stat(exePath); err == nil {
-				fileHash, err := hash.CalculateHash(exePath, hashCfg)
+				fileHash, err := hash.Calculate(exePath, 0, hashCfg)
 				if err == nil {
 					info.FileHash = fileHash
 				} else {
