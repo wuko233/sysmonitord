@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"sysmonitord/cmd/start"
+	"sysmonitord/cmd/version"
 	"sysmonitord/pkg/logger"
 
 	"github.com/spf13/cobra"
@@ -19,6 +20,7 @@ func main() {
 	}
 
 	rootCmd.AddCommand(start.StartCmd)
+	rootCmd.AddCommand(version.VersionCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		logger.Log.Error("命令执行失败", zap.Error(err))
