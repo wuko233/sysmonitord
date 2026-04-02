@@ -10,6 +10,7 @@ import (
 	"sysmonitord/internal/scanner/hash"
 	"sysmonitord/pkg/logger"
 
+	"github.com/schollz/progressbar/v3"
 	"go.uber.org/zap"
 )
 
@@ -36,18 +37,58 @@ func (s *Scanner) Scan() ([]FileInfo, error) {
 		targetPaths = []string{"/"}
 	}
 
-	var allFiles []FileInfo
-
+	var allPaths []string
 	for _, root := range targetPaths {
 		if _, err := os.Stat(root); os.IsNotExist(err) {
+			logger.Log.Debug("扫描路径不存在，已跳过", zap.String("path", root))
+			continue
+		}
+		logger.Log.Info("[scan]正在扫描文件系统", zap.String("root", root))
+
+		err := filepath.WalkDir(root, s.collectPathsFunc(&allPaths))
+		if err != nil {
+			logger.Log.Error("[scan]扫描文件系统时发生错误", zap.String("root", root), zap.Error(err))
+		}
+	}
+
+	logger.Log.Info("[scan]开始计算文件哈希", zap.Int("文件数量", len(allPaths)))
+
+	var allFiles []FileInfo
+	hashCfg, _ := s.cfg.GetHashConfig()
+
+	bar := progressbar.NewOptions(len(allPaths),
+		progressbar.OptionSetDescription("[scan]计算文件哈希"),
+		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionShowCount(),
+		progressbar.OptionShowIts(),
+		progressbar.OptionSetItsString("files"),
+		progressbar.OptionOnCompletion(func() {
+			fmt.Fprintln(os.Stderr, "\n[scan]文件哈希计算完成")
+		}),
+	)
+
+	for _, path := range allPaths {
+		bar.Add(1)
+
+		info, err := os.Stat(path)
+		if err != nil {
+			logger.Log.Debug("[scan]无法获取文件信息", zap.String("path", path), zap.Error(err))
 			continue
 		}
 
-		logger.Log.Info("[scan]正在扫描文件系统", zap.String("root", root))
+		if info.Size() > 0 {
+			hash, err := hash.Calculate(path, info.Size(), hashCfg)
+			if err != nil {
+				logger.Log.Debug("[scan]无法计算文件哈希", zap.String("path", path), zap.Error(err))
+				continue
+			}
 
-		err := filepath.WalkDir(root, s.WalkFunc(&allFiles))
-		if err != nil {
-			logger.Log.Error("[scan]扫描文件系统时发生错误", zap.String("root", root), zap.Error(err))
+			allFiles = append(allFiles, FileInfo{
+				Path:    path,
+				Hash:    hash,
+				ModTime: info.ModTime().Unix(),
+				Size:    info.Size(),
+			})
 		}
 	}
 
@@ -99,6 +140,29 @@ func (s *Scanner) WalkFunc(result *[]FileInfo) fs.WalkDirFunc {
 			})
 		}
 
+		return nil
+	}
+}
+
+func (s *Scanner) collectPathsFunc(result *[]string) fs.WalkDirFunc {
+	return func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			logger.Log.Debug("[scan]跳过路径", zap.String("path", path), zap.Error(err))
+			return fs.SkipDir
+		}
+
+		if d.IsDir() {
+			return nil
+		}
+
+		for _, exclude := range s.cfg.Scanner.File.ExcludePaths {
+			if strings.HasPrefix(path, exclude) {
+				logger.Log.Debug("[scan]跳过路径", zap.String("path", path), zap.String("reason", "匹配排除路径"))
+				return nil
+			}
+		}
+
+		*result = append(*result, path)
 		return nil
 	}
 }
