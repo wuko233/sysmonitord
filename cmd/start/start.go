@@ -56,22 +56,6 @@ var StartCmd = &cobra.Command{
 			}
 		}
 
-		logger.Log.Info("进程列表：")
-		for i, p := range procs {
-			if i >= 10 {
-				logger.Log.Info("... (仅显示前10个进程)")
-				break
-			}
-			logger.Log.Info(
-				"进程信息",
-				zap.Int32("pid", p.PID),
-				zap.String("name", p.Name),
-				zap.String("path", p.Path),
-				zap.String("cmdline", p.Cmdline),
-				zap.Stringer("data", p),
-			)
-		}
-
 		// ====== 文件扫描和存储 ======
 		logger.Log.Info("正在扫描文件系统...")
 

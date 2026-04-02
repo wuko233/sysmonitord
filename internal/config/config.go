@@ -1,9 +1,14 @@
 package config
 
 type Config struct {
+	Log     LogConfig     `yaml:"log"`
 	Audit   AuditConfig   `yaml:"audit"`
 	Scanner ScannerConfig `yaml:"scanner"`
 	Storage StorageConfig `yaml:"storage"`
+}
+
+type LogConfig struct {
+	Level string `yaml:"level"`
 }
 
 type AuditConfig struct {
