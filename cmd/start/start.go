@@ -87,7 +87,7 @@ var StartCmd = &cobra.Command{
 		// ====== 启动文件监听 ======
 		logger.Log.Info("正在启动文件监听...")
 
-		mon, err := watcher.NewWatcher(cfg.Scanner.File.IncludePaths, cfg.Scanner.File.ExcludePaths)
+		mon, err := watcher.NewWatcher(cfg)
 		if err != nil {
 			logger.Log.Error("启动文件监听失败", zap.Error(err))
 			os.Exit(1)
