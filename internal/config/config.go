@@ -19,12 +19,17 @@ type AuditConfig struct {
 }
 
 type ScannerConfig struct {
-	File FileScannerConfig `yaml:"file"`
-	Hash hashConfig        `yaml:"hash"`
+	File    FileScannerConfig    `yaml:"file"`
+	Hash    hashConfig           `yaml:"hash"`
+	Process ProcessScannerConfig `yaml:"process"`
 }
 
 type hashConfig struct {
 	Algorithm string `yaml:"algorithm"`
+}
+
+type ProcessScannerConfig struct {
+	Interval int `yaml:"interval"`
 }
 
 type StorageConfig struct {

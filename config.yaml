@@ -3,8 +3,8 @@ server:
   port: 8080
 
 log:
-  # level: "info"
-  level: "debug"
+  level: "info"
+  # level: "debug"
 
 audit:
   enabled: true
@@ -26,6 +26,8 @@ scanner:
     fast_hash: true
     fast_hash_size: 100MB
     fast_hash_chunk: 2MB
+  process:
+    interval: 30 # seconds
 
 storage:
   data_dir: "./data"

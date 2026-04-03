@@ -3,7 +3,11 @@ package start
 import (
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 	"sysmonitord/internal/config"
+	"sysmonitord/internal/monitor/detector"
+	"sysmonitord/internal/monitor/timer"
 	"sysmonitord/internal/monitor/watcher"
 	"sysmonitord/internal/scanner/file"
 	"sysmonitord/internal/scanner/process"
@@ -91,7 +95,15 @@ var StartCmd = &cobra.Command{
 
 		mon.Start()
 
-		logger.Log.Info("系统监控守护服务已启动，正在监控文件系统变化...")
+		// ====== 启动进程检测定时任务 ======
+		procDetector := detector.NewProcessDetector(cfg)
+		procScheduler := timer.NewScheduler(time.Duration(cfg.Scanner.Process.Interval)*time.Second, procDetector)
+		procScheduler.Start()
+
+		logger.Log.Info("系统监控守护服务已启动，正在监控系统变化...")
+
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
 		for {
 			select {
@@ -110,11 +122,12 @@ var StartCmd = &cobra.Command{
 			case err := <-mon.Errors():
 				logger.Log.Error("文件监听错误", zap.Error(err))
 
-				// case <-quit:
-				// 	logger.Log.Info("正在停止系统监控守护服务...")
-				// 	mon.Stop()
-				// 	logger.Log.Info("系统监控守护服务已停止")
-				// 	return
+			case <-quit:
+				logger.Log.Info("正在停止系统监控守护服务...")
+				mon.Stop()
+				procScheduler.Stop()
+				logger.Log.Info("系统监控守护服务已停止")
+				return
 
 			}
 		}
