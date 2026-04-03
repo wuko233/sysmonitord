@@ -42,7 +42,7 @@ func (w *Watcher) Start() {
 
 	for _, path := range paths {
 		if _, err := os.Stat(path); os.IsNotExist(err) {
-			fmt.Printf("[monitor] 路径不存在: %s\n", path)
+			logger.Log.Warn("[monitor] 路径不存在", zap.String("path", path))
 			continue
 		}
 
@@ -72,7 +72,7 @@ func (w *Watcher) eventLoop() {
 			if !ok {
 				return
 			}
-			fmt.Printf("[monitor] 监听错误: %v\n", err)
+			logger.Log.Error("[monitor] 监听错误", zap.Error(err))
 		case event, ok := <-w.fsnWatcher.Events:
 			if !ok {
 				return
@@ -121,7 +121,7 @@ func (w *Watcher) addPath(path string) {
 			}
 
 			if err := w.fsnWatcher.Add(subPath); err != nil {
-				fmt.Printf("[monitor] 添加监听失败: %s, 错误: %v\n", subPath, err)
+				logger.Log.Error("[monitor] 添加监听失败", zap.String("path", subPath), zap.Error(err))
 			}
 		}
 

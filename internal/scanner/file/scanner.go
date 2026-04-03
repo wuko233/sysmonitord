@@ -63,7 +63,7 @@ func (s *Scanner) Scan() ([]FileInfo, error) {
 		progressbar.OptionShowIts(),
 		progressbar.OptionSetItsString("files"),
 		progressbar.OptionOnCompletion(func() {
-			fmt.Fprintln(os.Stderr, "\n[scan]文件哈希计算完成")
+			logger.Log.Info("[scan]文件哈希计算完成")
 		}),
 	)
 
