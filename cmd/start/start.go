@@ -95,6 +95,13 @@ var StartCmd = &cobra.Command{
 
 		mon.Start()
 
+		// ====== 初始化文件检测器 ======
+		fileDetector, err := detector.NewFileDetector(cfg)
+		if err != nil {
+			logger.Log.Error("初始化文件检测器失败", zap.Error(err))
+			os.Exit(1)
+		}
+
 		// ====== 启动进程检测定时任务 ======
 		procDetector := detector.NewProcessDetector(cfg)
 		procScheduler := timer.NewScheduler(time.Duration(cfg.Scanner.Process.Interval)*time.Second, procDetector)
@@ -115,8 +122,8 @@ var StartCmd = &cobra.Command{
 				)
 
 				if event.FileInfo != nil {
-					// Todo: 处理文件系统事件，例如更新白名单、触发告警等
 					logger.Log.Debug("文件详情", zap.Int64("size", event.FileInfo.Size()))
+					fileDetector.HandleEvent(event.Path, event.Op.String())
 				}
 
 			case err := <-mon.Errors():

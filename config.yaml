@@ -33,3 +33,4 @@ storage:
   data_dir: "./data"
   process_system_file: "process_system.data"
   file_system_file: "file_system.data"
+  dubious_file_list_file: "dubious_files.data"

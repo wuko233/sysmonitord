@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sysmonitord/internal/scanner/file"
 	"sysmonitord/internal/scanner/process"
 	"sysmonitord/pkg/logger"
@@ -95,4 +96,58 @@ func SaveFileSystem(files []file.FileInfo, dataDir string, fileSystemFile string
 	)
 
 	return nil
+}
+
+type DubiousFileInfo struct {
+	Path         string
+	Hash         string
+	DiscoveredAt string
+}
+
+func SaveDubiousFiles(files DubiousFileInfo, dataDir string, dubiousFileName string) error {
+	filePath := filepath.Join(dataDir, dubiousFileName)
+
+	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("[storage]无法创建或打开可疑文件记录文件%s: %w", filePath, err)
+	}
+	defer f.Close()
+
+	writer := bufio.NewWriter(f)
+
+	line := fmt.Sprintf("%s:%s:%s\n", files.Path, files.Hash, files.DiscoveredAt)
+	if _, err := writer.WriteString(line); err != nil {
+		return err
+	}
+
+	return writer.Flush()
+}
+
+func LoadFileSystemWhitelist(dataDir string, fileSystemFile string) (map[string]string, error) {
+	filePath := filepath.Join(dataDir, fileSystemFile)
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("[storage]无法打开文件系统白名单文件%s: %w", filePath, err)
+	}
+	defer f.Close()
+
+	whitelist := make(map[string]string)
+	scanner := bufio.NewScanner(f)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "#") || line == "" {
+			continue
+		}
+
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) >= 2 {
+			whitelist[parts[0]] = parts[1]
+		}
+	}
+	return whitelist, nil
+}
+
+func GetFileInfo(path string) (os.FileInfo, error) {
+	return os.Stat(path)
 }
