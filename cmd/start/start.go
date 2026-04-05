@@ -9,6 +9,7 @@ import (
 	"sysmonitord/internal/monitor/detector"
 	"sysmonitord/internal/monitor/timer"
 	"sysmonitord/internal/monitor/watcher"
+	"sysmonitord/internal/notifier"
 	"sysmonitord/internal/scanner/file"
 	"sysmonitord/internal/scanner/process"
 	"sysmonitord/internal/storage"
@@ -107,6 +108,10 @@ var StartCmd = &cobra.Command{
 		procScheduler := timer.NewScheduler(time.Duration(cfg.Scanner.Process.Interval)*time.Second, procDetector)
 		procScheduler.Start()
 
+		// ====== 启动告警管理器 ======
+		alerter := notifier.NewAlerter(cfg.Notification)
+		alerter.Start()
+
 		logger.Log.Info("系统监控守护服务已启动，正在监控系统变化...")
 
 		quit := make(chan os.Signal, 1)
@@ -125,6 +130,14 @@ var StartCmd = &cobra.Command{
 					logger.Log.Debug("文件详情", zap.Int64("size", event.FileInfo.Size()))
 					fileDetector.HandleEvent(event.Path, event.Op.String())
 				}
+
+				// test
+				alerter.PushAlert(notifier.AlertEvent{
+					Type:    "File",
+					Path:    event.Path,
+					Reason:  event.Op.String(),
+					Details: "To test",
+				})
 
 			case err := <-mon.Errors():
 				logger.Log.Error("文件监听错误", zap.Error(err))

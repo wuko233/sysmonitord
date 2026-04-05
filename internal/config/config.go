@@ -1,10 +1,28 @@
 package config
 
 type Config struct {
-	Log     LogConfig     `yaml:"log"`
-	Audit   AuditConfig   `yaml:"audit"`
-	Scanner ScannerConfig `yaml:"scanner"`
-	Storage StorageConfig `yaml:"storage"`
+	Log          LogConfig          `yaml:"log"`
+	Audit        AuditConfig        `yaml:"audit"`
+	Scanner      ScannerConfig      `yaml:"scanner"`
+	Storage      StorageConfig      `yaml:"storage"`
+	Notification NotificationConfig `yaml:"notification"`
+}
+
+type NotificationConfig struct {
+	Email EmailConfig `yaml:"email"`
+}
+
+type EmailConfig struct {
+	Enabled    bool       `yaml:"enabled"`
+	Recipients []string   `yaml:"recipients"`
+	SMTP       SMTPConfig `yaml:"smtp"`
+}
+
+type SMTPConfig struct {
+	Server   string `yaml:"server"`
+	Port     int    `yaml:"port"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
 }
 
 type LogConfig struct {
