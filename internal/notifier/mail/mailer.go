@@ -2,11 +2,11 @@ package mail
 
 import (
 	"fmt"
-	"net/smtp"
 	"sysmonitord/internal/config"
 	"sysmonitord/pkg/logger"
 
 	"go.uber.org/zap"
+	"gopkg.in/gomail.v2"
 )
 
 type Mailer struct {
@@ -23,28 +23,35 @@ func (m *Mailer) Send(subject, body string) error {
 		return nil
 	}
 
-	headers := make(map[string]string)
-	headers["From"] = m.cfg.SMTP.Username
-	headers["To"] = m.cfg.Recipients[0]
-	headers["Subject"] = subject
-
-	message := ""
-	for k, v := range headers {
-		message += fmt.Sprintf("%s: %s\r\n", k, v)
+	if m.cfg.SMTP.Server == "" || m.cfg.SMTP.Port == 0 {
+		logger.Log.Error("[notifier] SMTP配置缺失",
+			zap.String("server", m.cfg.SMTP.Server),
+			zap.Int("port", m.cfg.SMTP.Port),
+		)
+		return fmt.Errorf("SMTP配置缺失")
 	}
-	message += "\r\n" + body
 
-	auth := smtp.PlainAuth("", m.cfg.SMTP.Username, m.cfg.SMTP.Password, m.cfg.SMTP.Server)
-	addr := fmt.Sprintf("%s:%d", m.cfg.SMTP.Server, m.cfg.SMTP.Port)
+	msg := gomail.NewMessage()
+	msg.SetHeader("From", m.cfg.SMTP.Username)
+	msg.SetHeader("To", m.cfg.Recipients...)
+	msg.SetHeader("Subject", subject)
+	msg.SetBody("text/plain", body)
 
-	logger.Log.Info("[notifier] 发送邮件通知", zap.String("subject", subject), zap.String("to", m.cfg.Recipients[0]))
+	d := gomail.NewDialer(
+		m.cfg.SMTP.Server,
+		m.cfg.SMTP.Port,
+		m.cfg.SMTP.Username,
+		m.cfg.SMTP.Password,
+	)
 
-	err := smtp.SendMail(addr, auth, m.cfg.SMTP.Username, m.cfg.Recipients, []byte(message))
-	if err != nil {
-		logger.Log.Error("[notifier] 发送邮件失败", zap.Error(err))
+	if m.cfg.SMTP.Port == 465 {
+		d.SSL = true
+	}
+
+	if err := d.DialAndSend(msg); err != nil {
+		logger.Log.Error("[notifier] 邮件发送失败", zap.Error(err))
 		return err
 	}
-
-	logger.Log.Info("[notifier] 邮件发送成功")
+	logger.Log.Info("[notifier] 邮件发送成功", zap.Strings("recipients", m.cfg.Recipients))
 	return nil
 }

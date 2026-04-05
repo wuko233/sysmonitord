@@ -34,7 +34,7 @@ func NewAlerter(cfg config.NotificationConfig) *Alerter {
 		mailer:    mail.NewMailer(cfg.Email),
 		eventChan: make(chan AlertEvent, 100),
 		buffer:    make([]AlertEvent, 0),
-		interval:  1 * time.Minute, // Todo: 可配置化
+		interval:  30 * time.Second, // Todo: 可配置化
 	}
 }
 
@@ -63,6 +63,7 @@ func (a *Alerter) loop() {
 			logger.Log.Debug("[notifier] 收到告警，加入待发送序列", zap.String("path", event.Path))
 
 		case <-a.timer.C:
+			logger.Log.Debug("[notifier] 定时检查告警事件，准备发送", zap.Int("count", len(a.buffer)))
 			a.mu.Lock()
 			if len(a.buffer) > 0 {
 				a.sendAlert()
