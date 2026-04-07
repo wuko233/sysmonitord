@@ -51,10 +51,11 @@ type ProcessScannerConfig struct {
 }
 
 type StorageConfig struct {
-	DataDir             string `yaml:"data_dir"`
-	ProcessSystemFile   string `yaml:"process_system_file"`
-	FileSystemFile      string `yaml:"file_system_file"`
-	DubiousFileListFile string `yaml:"dubious_file_list_file"`
+	DataDir                string `yaml:"data_dir"`
+	ProcessSystemFile      string `yaml:"process_system_file"`
+	FileSystemFile         string `yaml:"file_system_file"`
+	DubiousFileListFile    string `yaml:"dubious_file_list_file"`
+	DubiousProcessListFile string `yaml:"dubious_process_list_file"`
 }
 
 type FileScannerConfig struct {

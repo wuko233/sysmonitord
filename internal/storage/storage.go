@@ -104,6 +104,34 @@ type DubiousFileInfo struct {
 	DiscoveredAt string
 }
 
+type DubiousProcessInfo struct {
+	PID          int32
+	Name         string
+	Path         string
+	Cmdline      string
+	FileHash     string
+	DiscoveredAt string
+}
+
+func SaveDubiousProcesses(proc DubiousProcessInfo, dataDir string, dubiousProcessFile string) error {
+	filePath := filepath.Join(dataDir, dubiousProcessFile)
+
+	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("[storage]无法创建或打开可疑进程记录文件%s: %w", filePath, err)
+	}
+	defer f.Close()
+
+	writer := bufio.NewWriter(f)
+
+	line := fmt.Sprintf("%d:%s:%s:%s:%s\n", proc.PID, proc.Name, proc.Path, proc.Cmdline, proc.DiscoveredAt)
+	if _, err := writer.WriteString(line); err != nil {
+		return err
+	}
+
+	return writer.Flush()
+}
+
 func SaveDubiousFiles(files DubiousFileInfo, dataDir string, dubiousFileName string) error {
 	filePath := filepath.Join(dataDir, dubiousFileName)
 

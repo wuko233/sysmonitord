@@ -88,13 +88,13 @@ var StartCmd = &cobra.Command{
 		// ====== 启动文件监听 ======
 		logger.Log.Info("正在启动文件监听...")
 
-		mon, err := watcher.NewWatcher(cfg)
+		fileMon, err := watcher.NewWatcher(cfg)
 		if err != nil {
 			logger.Log.Error("启动文件监听失败", zap.Error(err))
 			os.Exit(1)
 		}
 
-		mon.Start()
+		fileMon.Start()
 
 		// ====== 初始化文件检测器 ======
 		fileDetector, err := detector.NewFileDetector(cfg)
@@ -104,7 +104,13 @@ var StartCmd = &cobra.Command{
 		}
 
 		// ====== 启动进程检测定时任务 ======
-		procDetector := detector.NewProcessDetector(cfg)
+		procDetector, err := detector.NewProcessDetector(cfg)
+		if err != nil {
+			logger.Log.Error("初始化进程检测器失败", zap.Error(err))
+			os.Exit(1)
+		}
+
+		procEventChan := procDetector.Event()
 		procScheduler := timer.NewScheduler(time.Duration(cfg.Scanner.Process.Interval)*time.Second, procDetector)
 		procScheduler.Start()
 
@@ -120,7 +126,7 @@ var StartCmd = &cobra.Command{
 		for {
 			select {
 
-			case event := <-mon.Events():
+			case event := <-fileMon.Events():
 				logger.Log.Info("文件系统事件",
 					zap.String("path", event.Path),
 					zap.String("op", event.Op.String()),
@@ -139,12 +145,29 @@ var StartCmd = &cobra.Command{
 					Details: "To test",
 				})
 
-			case err := <-mon.Errors():
+			case procEvents := <-procEventChan:
+				logger.Log.Info("可疑进程事件",
+					zap.Int32("pid", procEvents.PID),
+					zap.String("name", procEvents.Name),
+					zap.String("path", procEvents.Path),
+				)
+
+				procDetector.HandleDubiousProcesses(procEvents)
+
+				// test
+				alerter.PushAlert(notifier.AlertEvent{
+					Type:    "Process",
+					Path:    procEvents.Path,
+					Reason:  "可疑进程",
+					Details: "To test",
+				})
+
+			case err := <-fileMon.Errors():
 				logger.Log.Error("文件监听错误", zap.Error(err))
 
 			case <-quit:
 				logger.Log.Info("正在停止系统监控守护服务...")
-				mon.Stop()
+				fileMon.Stop()
 				procScheduler.Stop()
 				logger.Log.Info("系统监控守护服务已停止")
 				return
