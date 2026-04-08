@@ -12,16 +12,20 @@ import (
 )
 
 type FileDetector struct {
-	cfg        *config.Config
-	whiteList  map[string]string
-	storageDir string
-	mu         sync.RWMutex
+	cfg         *config.Config
+	whiteList   map[string]string
+	storageDir  string
+	mu          sync.RWMutex
+	timer       map[string]*time.Timer
+	debDuration time.Duration
 }
 
 func NewFileDetector(cfg *config.Config) (*FileDetector, error) {
 	d := &FileDetector{
-		cfg:        cfg,
-		storageDir: cfg.Storage.DataDir,
+		cfg:         cfg,
+		storageDir:  cfg.Storage.DataDir,
+		timer:       make(map[string]*time.Timer),
+		debDuration: 1 * time.Second,
 	}
 
 	if err := d.loadWhiteList(); err != nil {
@@ -46,6 +50,22 @@ func (d *FileDetector) loadWhiteList() error {
 func (d *FileDetector) HandleEvent(eventPath string, opStr string) {
 	// Todo: 忽略临时文件等
 
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if t, exists := d.timer[eventPath]; exists {
+		t.Stop()
+	}
+
+	d.timer[eventPath] = time.AfterFunc(d.debDuration, func() {
+		d.processEvent(eventPath)
+		d.mu.Lock()
+		delete(d.timer, eventPath)
+		d.mu.Unlock()
+	})
+}
+
+func (d *FileDetector) processEvent(eventPath string) {
 	info, err := storage.GetFileInfo(eventPath)
 	if err != nil {
 		logger.Log.Warn("[monitor] 获取文件信息失败", zap.String("path", eventPath), zap.Error(err))
