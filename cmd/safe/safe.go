@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
+	"golang.org/x/term"
 )
 
 var SafeCmd = &cobra.Command{
@@ -28,6 +29,25 @@ var SafeCmd = &cobra.Command{
 
 		interactiveSafe(cfg)
 	},
+}
+
+func readKeyWithESC() (string, error) {
+	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		return "", err
+	}
+	defer term.Restore(int(os.Stdin.Fd()), oldState)
+
+	b := make([]byte, 1)
+	_, err = os.Stdin.Read(b)
+	if err != nil {
+		return "", err
+	}
+
+	if b[0] == 27 { // ESC
+		return "ESC", nil
+	}
+	return string(b), nil
 }
 
 func interactiveSafe(cfg *config.Config) {
@@ -55,12 +75,14 @@ func interactiveSafe(cfg *config.Config) {
 	fmt.Println("\n请选择操作:")
 	fmt.Println("[1] 将以上可疑文件全部确认为安全 (移至白名单)")
 	// Todo: 支持逐个确认
-	fmt.Println("[2] 退出不处理")
-	fmt.Print("请输入选项 (1-2): ")
+	fmt.Println("[ESC] 退出不处理")
+	fmt.Print("请输入选项: ")
 
-	reader := bufio.NewReader(os.Stdin)
-	input, _ := reader.ReadString('\n')
-	input = strings.TrimSpace(input)
+	input, err := readKeyWithESC()
+	if err != nil {
+		fmt.Printf("读取输入失败: %v\n", err)
+		return
+	}
 
 	switch input {
 	case "1":
@@ -70,7 +92,7 @@ func interactiveSafe(cfg *config.Config) {
 		} else {
 			fmt.Println("已将可疑文件移入白名单。")
 		}
-	case "2":
+	case "ESC":
 		fmt.Println("已取消操作。")
 	default:
 		fmt.Println("无效选项，已退出。")
