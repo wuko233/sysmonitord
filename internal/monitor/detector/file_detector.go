@@ -1,6 +1,10 @@
 package detector
 
 import (
+	"bufio"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sysmonitord/internal/config"
 	"sysmonitord/internal/scanner/hash"
@@ -12,26 +16,63 @@ import (
 )
 
 type FileDetector struct {
-	cfg         *config.Config
-	whiteList   map[string]string
-	storageDir  string
-	mu          sync.RWMutex
-	timer       map[string]*time.Timer
-	debDuration time.Duration
+	cfg          *config.Config
+	whiteList    map[string]string
+	dubiousCache map[string]string
+	storageDir   string
+	mu           sync.RWMutex
+	timer        map[string]*time.Timer
+	debDuration  time.Duration
 }
 
 func NewFileDetector(cfg *config.Config) (*FileDetector, error) {
 	d := &FileDetector{
-		cfg:         cfg,
-		storageDir:  cfg.Storage.DataDir,
-		timer:       make(map[string]*time.Timer),
-		debDuration: 1 * time.Second,
+		cfg:          cfg,
+		storageDir:   cfg.Storage.DataDir,
+		timer:        make(map[string]*time.Timer),
+		debDuration:  1 * time.Second,
+		dubiousCache: make(map[string]string),
 	}
 
 	if err := d.loadWhiteList(); err != nil {
 		return nil, err
 	}
+
+	if err := d.loadDubiousCache(); err != nil {
+		logger.Log.Warn("[monitor] 加载可疑文件缓存失败，使用空缓存...", zap.Error((err)))
+	}
+
 	return d, nil
+}
+
+func (d *FileDetector) loadDubiousCache() error {
+	filePath := filepath.Join(d.storageDir, d.cfg.Storage.DubiousFileListFile)
+
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return nil
+	}
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		parts := strings.Split(line, ":")
+		if len(parts) >= 2 {
+			d.dubiousCache[parts[0]] = parts[1]
+		}
+	}
+
+	logger.Log.Debug("[monitor] 可疑文件缓存加载成功", zap.Int("count", len(d.dubiousCache)))
+	return scanner.Err()
 }
 
 func (d *FileDetector) loadWhiteList() error {
@@ -105,14 +146,27 @@ func (d *FileDetector) processEvent(eventPath string) {
 	}
 
 	if isSuspicious {
-		logger.Log.Warn("[monitor] 可疑文件事件", zap.String("path", eventPath), zap.String("reason", reason), zap.String("hash", curHash))
-		dubiousInfo := storage.DubiousFileInfo{
-			Path:         eventPath,
-			Hash:         curHash,
-			DiscoveredAt: time.Now().Format("2006-01-02 15:04:05"),
-		}
-		if err := storage.SaveDubiousFiles(dubiousInfo, d.storageDir, d.cfg.Storage.DubiousFileListFile); err != nil {
-			logger.Log.Error("[monitor] 保存可疑文件信息失败", zap.String("path", eventPath), zap.Error(err))
+		d.mu.Lock()
+
+		cachedHash, exist := d.dubiousCache[eventPath]
+
+		if !exist || cachedHash != curHash {
+			d.dubiousCache[eventPath] = curHash
+
+			d.mu.Unlock()
+
+			logger.Log.Warn("[monitor] 可疑文件事件", zap.String("path", eventPath), zap.String("reason", reason), zap.String("hash", curHash))
+			dubiousInfo := storage.DubiousFileInfo{
+				Path:         eventPath,
+				Hash:         curHash,
+				DiscoveredAt: time.Now().Format("2006-01-02 15:04:05"),
+			}
+			if err := storage.SaveDubiousFiles(dubiousInfo, d.storageDir, d.cfg.Storage.DubiousFileListFile); err != nil {
+				logger.Log.Error("[monitor] 保存可疑文件信息失败", zap.String("path", eventPath), zap.Error(err))
+			}
+		} else {
+			d.mu.Unlock()
+			logger.Log.Debug("[monitor] 文件事件已存在于可疑缓存中，忽略重复事件", zap.String("path", eventPath), zap.String("reason", reason), zap.String("hash", curHash))
 		}
 	}
 }
