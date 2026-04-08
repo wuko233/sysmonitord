@@ -10,20 +10,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var StatusCmd = &cobra.Command{
-	Use:   "status",
-	Short: "显示系统状态",
-	Long:  "显示Sysmonitod的当前状态",
-	Run: func(cmd *cobra.Command, args []string) {
-		cfg, err := config.LoadConfig("./config.yaml")
+func NewStatusCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "status",
+		Short: "显示系统状态",
+		Long:  "显示Sysmonitod的当前状态",
+		Run: func(cmd *cobra.Command, args []string) {
+			cfg, err := config.LoadConfig("./config.yaml")
 
-		if err != nil {
-			fmt.Printf("加载配置失败: %v\n", err)
-			os.Exit(1)
-		}
+			if err != nil {
+				fmt.Printf("加载配置失败: %v\n", err)
+				os.Exit(1)
+			}
 
-		printStatus(cfg)
-	},
+			printStatus(cfg)
+		},
+	}
+	return cmd
 }
 
 func printStatus(cfg *config.Config) {

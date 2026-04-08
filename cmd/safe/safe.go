@@ -16,19 +16,22 @@ import (
 	"golang.org/x/term"
 )
 
-var SafeCmd = &cobra.Command{
-	Use:   "safe",
-	Short: "交互式安全确认，将可疑对象加入白名单",
-	Long:  "查看当前的可疑文件和进程列表，并选择将其移入白名单。",
-	Run: func(cmd *cobra.Command, args []string) {
-		cfg, err := config.LoadConfig("./config.yaml")
-		if err != nil {
-			fmt.Printf("加载配置失败: %v\n", err)
-			os.Exit(1)
-		}
+func NewSafeCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "safe",
+		Short: "交互式安全确认，将可疑对象加入白名单",
+		Long:  "查看当前的可疑文件和进程列表，并选择将其移入白名单。",
+		Run: func(cmd *cobra.Command, args []string) {
+			cfg, err := config.LoadConfig("./config.yaml")
+			if err != nil {
+				fmt.Printf("加载配置失败: %v\n", err)
+				os.Exit(1)
+			}
 
-		interactiveSafe(cfg)
-	},
+			interactiveSafe(cfg)
+		},
+	}
+	return cmd
 }
 
 func readKeyWithESC() (string, error) {

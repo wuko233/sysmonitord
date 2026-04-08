@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"sysmonitord/cmd/safe"
 	"sysmonitord/cmd/start"
@@ -13,39 +15,44 @@ import (
 	"go.uber.org/zap"
 )
 
-func getConfigPath() string {
-	if _, err := os.Stat("./config.yaml"); err == nil {
-		return "./config.yaml"
-	}
-
-	if _, err := os.Stat("/etc/sysmonitord/config.yaml"); err == nil {
-		return "/etc/sysmonitord/config.yaml"
-	}
-
-	return "./config.yaml"
-}
+var (
+	cfgFile string
+	cfg     *config.Config
+)
 
 func main() {
 	logger.InitLogger()
 	defer logger.Sync()
 
-	cfg, err := config.LoadConfig(getConfigPath())
-	if err != nil {
-		logger.Log.Error("加载配置文件失败", zap.Error(err))
-		os.Exit(1)
-	} else {
-		logger.SetLogLevel(cfg.Log.Level)
-	}
-
 	var rootCmd = &cobra.Command{
 		Use:   "sysmonitord",
 		Short: "Sysmonitord 是一个 Linux 系统安全监控工具",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if cfgFile == "" {
+				if _, err := os.Stat("./config.yaml"); err == nil {
+					cfgFile = "./config.yaml"
+				} else if _, err := os.Stat("/etc/sysmonitord/config.yaml"); err == nil {
+					cfgFile = "/etc/sysmonitord/config.yaml"
+				}
+			}
+
+			cfg, err := config.LoadConfig(cfgFile)
+			if err != nil {
+				return fmt.Errorf("加载配置文件失败: %w", err)
+			}
+
+			ctx := context.WithValue(cmd.Context(), "config", cfg)
+			cmd.SetContext(ctx)
+			return nil
+		},
 	}
 
-	rootCmd.AddCommand(start.StartCmd)
-	rootCmd.AddCommand(version.VersionCmd)
-	rootCmd.AddCommand(status.StatusCmd)
-	rootCmd.AddCommand(safe.SafeCmd)
+	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "配置文件路径 (默认: ./config.yaml 或 /etc/sysmonitord/config.yaml)")
+
+	rootCmd.AddCommand(start.NewStartCmd())
+	rootCmd.AddCommand(version.NewVersionCmd())
+	rootCmd.AddCommand(status.NewStatusCmd())
+	rootCmd.AddCommand(safe.NewSafeCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		logger.Log.Error("命令执行失败", zap.Error(err))
