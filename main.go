@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"sysmonitord/cmd/safe"
 	"sysmonitord/cmd/start"
 	"sysmonitord/cmd/status"
 	"sysmonitord/cmd/version"
@@ -32,6 +33,7 @@ func main() {
 	rootCmd.AddCommand(start.StartCmd)
 	rootCmd.AddCommand(version.VersionCmd)
 	rootCmd.AddCommand(status.StatusCmd)
+	rootCmd.AddCommand(safe.SafeCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		logger.Log.Error("命令执行失败", zap.Error(err))
