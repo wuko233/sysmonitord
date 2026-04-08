@@ -24,3 +24,4 @@ go.work
 sysmonitord.code-workspace
 data/
 config.yaml
+dist/

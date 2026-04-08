@@ -19,7 +19,7 @@ scanner:
     algorithm: "xxhash64"
   file:
     include_paths:
-      - /home/wuko233/Downloads
+      - /
     exclude_paths:
       - /proc
       - /sys
@@ -27,10 +27,22 @@ scanner:
     fast_hash_size: 100MB
     fast_hash_chunk: 2MB
   process:
-    interval: 30 # seconds
+    interval: 300 # seconds
 
 storage:
   data_dir: "./data"
   process_system_file: "process_system.data"
   file_system_file: "file_system.data"
   dubious_file_list_file: "dubious_files.data"
+  dubious_process_list_file: "dubious_processes.data"
+
+notification:
+  email:
+    enabled: true
+    recipients:
+      - admin@wuko.top
+    smtp:
+      server:
+      port: 465
+      username:
+      password:

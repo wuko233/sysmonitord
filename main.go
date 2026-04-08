@@ -13,11 +13,23 @@ import (
 	"go.uber.org/zap"
 )
 
+func getConfigPath() string {
+	if _, err := os.Stat("./config.yaml"); err == nil {
+		return "./config.yaml"
+	}
+
+	if _, err := os.Stat("/etc/sysmonitord/config.yaml"); err == nil {
+		return "/etc/sysmonitord/config.yaml"
+	}
+
+	return "./config.yaml"
+}
+
 func main() {
 	logger.InitLogger()
 	defer logger.Sync()
 
-	cfg, err := config.LoadConfig("./config.yaml")
+	cfg, err := config.LoadConfig(getConfigPath())
 	if err != nil {
 		logger.Log.Error("加载配置文件失败", zap.Error(err))
 		os.Exit(1)

@@ -1,0 +1,16 @@
+[Unit]
+Description=Sysmonitord - Linux System Security Monitor Daemon
+Documentation=https://github.com/wuko233/sysmonitord
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/bin/sysmonitord start
+Restart=on-failure
+RestartSec=10
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
