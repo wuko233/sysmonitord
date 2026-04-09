@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sysmonitord/internal/config"
+	"sysmonitord/internal/scanner/process"
 	"sysmonitord/internal/storage"
 	"sysmonitord/pkg/logger"
 	"time"
@@ -56,13 +57,23 @@ func readKeyWithESC() (string, error) {
 func interactiveSafe(cfg *config.Config) {
 	dataDir := cfg.Storage.DataDir
 
-	dubiousFiles, err := readDubiousList(filepath.Join(dataDir, cfg.Storage.DubiousFileListFile))
+	dubiousFiles, err := readDubiousFileList(filepath.Join(dataDir, cfg.Storage.DubiousFileListFile))
 	if err != nil {
 		fmt.Printf("无法读取可疑文件列表: %v\n", err)
 		return
 	}
 	if len(dubiousFiles) == 0 {
 		fmt.Println("没有可疑文件需要处理。")
+		return
+	}
+
+	dubiousProcesses, err := storage.LoadDubiousProcesses(dataDir, cfg.Storage.DubiousProcessListFile)
+	if err != nil {
+		fmt.Printf("无法读取可疑进程列表: %v\n", err)
+		return
+	}
+	if len(dubiousProcesses) == 0 {
+		fmt.Println("没有可疑进程需要处理。")
 		return
 	}
 
@@ -75,8 +86,18 @@ func interactiveSafe(cfg *config.Config) {
 	}
 	fmt.Println("╚══════════════════════════════════════════════╝")
 
+	fmt.Println("\n╔══════════════════════════════════════════════╗")
+	fmt.Println("║           可疑进程清单 (" + fmt.Sprintf("%d", len(dubiousProcesses)) + "个)                 ║")
+	fmt.Println("╠══════════════════════════════════════════════╣")
+	for _, proc := range dubiousProcesses {
+		fmt.Printf("║ %-45s║\n", fmt.Sprintf("%s (%s)", proc.Name, proc.Path))
+	}
+	fmt.Println("╚══════════════════════════════════════════════╝")
+
 	fmt.Println("\n请选择操作:")
 	fmt.Println("[1] 将以上可疑文件全部确认为安全 (移至白名单)")
+	fmt.Println("[2] 将以上可疑进程全部确认为安全 (移至白名单)")
+	fmt.Println("[3] 全部确认安全 (文件和进程)")
 	// Todo: 支持逐个确认
 	fmt.Println("[ESC] 退出不处理")
 	fmt.Print("请输入选项: ")
@@ -95,14 +116,34 @@ func interactiveSafe(cfg *config.Config) {
 		} else {
 			fmt.Println("已将可疑文件移入白名单。")
 		}
+	case "2":
+		fmt.Println("正在处理...")
+		if err := confirmProcessesAsSafe(cfg, dubiousProcesses); err != nil {
+			fmt.Printf("处理失败: %v\n", err)
+		} else {
+			fmt.Println("已将可疑进程移入白名单。")
+		}
+	case "3":
+		fmt.Println("正在处理...")
+		if err := confirmFilesAsSafe(cfg, dubiousFiles); err != nil {
+			fmt.Printf("处理失败: %v\n", err)
+		} else {
+			fmt.Println("已将可疑文件移入白名单。")
+		}
+		if err := confirmProcessesAsSafe(cfg, dubiousProcesses); err != nil {
+			fmt.Printf("处理失败: %v\n", err)
+		} else {
+			fmt.Println("已将可疑进程移入白名单。")
+		}
 	case "ESC":
 		fmt.Println("已取消操作。")
 	default:
 		fmt.Println("无效选项，已退出。")
 	}
+
 }
 
-func readDubiousList(filePath string) ([]storage.DubiousFileInfo, error) {
+func readDubiousFileList(filePath string) ([]storage.DubiousFileInfo, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -131,6 +172,41 @@ func readDubiousList(filePath string) ([]storage.DubiousFileInfo, error) {
 	return list, scanner.Err()
 }
 
+func confirmProcessesAsSafe(cfg *config.Config, processes []storage.DubiousProcessInfo) error {
+	dataDir := cfg.Storage.DataDir
+	whiteListPath := filepath.Join(dataDir, cfg.Storage.ProcessSystemFile)
+	// dubiousFile := filepath.Join(dataDir, cfg.Storage.DubiousProcessListFile)
+
+	f, err := os.OpenFile(whiteListPath, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("无法打开白名单文件: %v", err)
+	}
+	defer f.Close()
+
+	var toWhitelist []process.ProcessInfo
+	for _, proc := range processes {
+		toWhitelist = append(toWhitelist, process.ProcessInfo{
+			Name:     proc.Name,
+			Path:     proc.Path,
+			FileHash: proc.FileHash,
+		})
+	}
+
+	if err := storage.AppendProcessToWhitelist(toWhitelist, dataDir, cfg.Storage.ProcessSystemFile); err != nil {
+		return fmt.Errorf("更新白名单失败: %v", err)
+	}
+
+	logger.Log.Debug("已将可疑进程移入白名单", zap.Int("count", len(toWhitelist)))
+
+	// Todo: 逐个删除条目
+	if err := storage.RemoveDubiousProcesses(dataDir, cfg.Storage.DubiousProcessListFile, []storage.DubiousProcessInfo{}); err != nil {
+		return fmt.Errorf("删除可疑进程列表失败: %v", err)
+	}
+
+	return nil
+
+}
+
 func confirmFilesAsSafe(cfg *config.Config, files []storage.DubiousFileInfo) error {
 	dataDir := cfg.Storage.DataDir
 	whiteListPath := filepath.Join(dataDir, cfg.Storage.FileSystemFile)
@@ -149,7 +225,7 @@ func confirmFilesAsSafe(cfg *config.Config, files []storage.DubiousFileInfo) err
 		if _, err := writer.WriteString(line); err != nil {
 			return fmt.Errorf("写入白名单失败: %v", err)
 		}
-		logger.Log.Info("已将可疑文件移入白名单", zap.String("path", file.Path), zap.String("hash", file.Hash))
+		logger.Log.Debug("已将可疑文件移入白名单", zap.String("path", file.Path), zap.String("hash", file.Hash))
 	}
 	if err := writer.Flush(); err != nil {
 		return fmt.Errorf("刷新写入缓冲区失败: %v", err)

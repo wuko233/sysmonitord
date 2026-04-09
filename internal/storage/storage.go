@@ -124,9 +124,81 @@ func SaveDubiousProcesses(proc DubiousProcessInfo, dataDir string, dubiousProces
 
 	writer := bufio.NewWriter(f)
 
-	line := fmt.Sprintf("%d:%s:%s:%s:%s\n", proc.PID, proc.Name, proc.Path, proc.Cmdline, proc.DiscoveredAt)
+	line := fmt.Sprintf("%s:%s:%s\n",
+		proc.Name, proc.Path, proc.FileHash)
 	if _, err := writer.WriteString(line); err != nil {
 		return err
+	}
+
+	return writer.Flush()
+}
+
+func LoadDubiousProcesses(dataDir string, dubiousProcessFile string) ([]DubiousProcessInfo, error) {
+	filePath := filepath.Join(dataDir, dubiousProcessFile)
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("[storage]无法打开可疑进程记录文件%s: %w", filePath, err)
+	}
+	defer f.Close()
+
+	var processes []DubiousProcessInfo
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.Split(line, ":")
+		if len(parts) >= 3 {
+			processes = append(processes, DubiousProcessInfo{
+				Name:     parts[0],
+				Path:     parts[1],
+				FileHash: parts[2],
+			})
+		}
+	}
+	return processes, scanner.Err()
+}
+
+func AppendProcessToWhitelist(procs []process.ProcessInfo, dataDir string, processSystemFile string) error {
+	filePath := filepath.Join(dataDir, processSystemFile)
+	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("[storage]无法创建或打开进程白名单文件%s: %w", filePath, err)
+	}
+	defer f.Close()
+
+	writer := bufio.NewWriter(f)
+
+	for _, p := range procs {
+		line := p.String() + "\n"
+		if _, err := writer.WriteString(line); err != nil {
+			return err
+		}
+	}
+
+	return writer.Flush()
+}
+
+func RemoveDubiousProcesses(dataDir string, dubiousProcessFile string, toKeep []DubiousProcessInfo) error {
+	filePath := filepath.Join(dataDir, dubiousProcessFile)
+	if len(toKeep) == 0 {
+		return os.Remove(filePath)
+	}
+
+	f, err := os.Create(filePath)
+	if err != nil {
+		return fmt.Errorf("[storage]无法创建可疑进程记录文件%s: %w", filePath, err)
+	}
+	defer f.Close()
+
+	writer := bufio.NewWriter(f)
+
+	for _, proc := range toKeep {
+		line := fmt.Sprintf("%s:%s:%s\n", proc.Name, proc.Path, proc.FileHash)
+		if _, err := writer.WriteString(line); err != nil {
+			return err
+		}
 	}
 
 	return writer.Flush()
