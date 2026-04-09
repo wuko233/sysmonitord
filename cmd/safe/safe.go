@@ -1,16 +1,14 @@
 package safe
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sysmonitord/internal/config"
+	"sysmonitord/internal/scanner/file"
 	"sysmonitord/internal/scanner/process"
 	"sysmonitord/internal/storage"
 	"sysmonitord/pkg/logger"
-	"time"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -57,7 +55,7 @@ func readKeyWithESC() (string, error) {
 func interactiveSafe(cfg *config.Config) {
 	dataDir := cfg.Storage.DataDir
 
-	dubiousFiles, err := readDubiousFileList(filepath.Join(dataDir, cfg.Storage.DubiousFileListFile))
+	dubiousFiles, err := storage.LoadDubiousFiles(dataDir, cfg.Storage.DubiousFileListFile)
 	if err != nil {
 		fmt.Printf("无法读取可疑文件列表: %v\n", err)
 		return
@@ -143,35 +141,6 @@ func interactiveSafe(cfg *config.Config) {
 
 }
 
-func readDubiousFileList(filePath string) ([]storage.DubiousFileInfo, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	defer file.Close()
-
-	var list []storage.DubiousFileInfo
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		parts := strings.Split(line, ":")
-		if len(parts) >= 3 {
-			list = append(list, storage.DubiousFileInfo{
-				Path: parts[0],
-				Hash: parts[1],
-			})
-		}
-	}
-	return list, scanner.Err()
-}
-
 func confirmProcessesAsSafe(cfg *config.Config, processes []storage.DubiousProcessInfo) error {
 	dataDir := cfg.Storage.DataDir
 	whiteListPath := filepath.Join(dataDir, cfg.Storage.ProcessSystemFile)
@@ -210,7 +179,7 @@ func confirmProcessesAsSafe(cfg *config.Config, processes []storage.DubiousProce
 func confirmFilesAsSafe(cfg *config.Config, files []storage.DubiousFileInfo) error {
 	dataDir := cfg.Storage.DataDir
 	whiteListPath := filepath.Join(dataDir, cfg.Storage.FileSystemFile)
-	dubiousFile := filepath.Join(dataDir, cfg.Storage.DubiousFileListFile)
+	// dubiousFile := filepath.Join(dataDir, cfg.Storage.DubiousFileListFile)
 
 	f, err := os.OpenFile(whiteListPath, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
@@ -218,22 +187,22 @@ func confirmFilesAsSafe(cfg *config.Config, files []storage.DubiousFileInfo) err
 	}
 	defer f.Close()
 
-	writer := bufio.NewWriter(f)
-	currentTime := time.Now().Format("2006-01-02 15:04:05")
-	for _, file := range files {
-		line := fmt.Sprintf("%s:%s:%s\n", file.Path, file.Hash, currentTime)
-		if _, err := writer.WriteString(line); err != nil {
-			return fmt.Errorf("写入白名单失败: %v", err)
-		}
-		logger.Log.Debug("已将可疑文件移入白名单", zap.String("path", file.Path), zap.String("hash", file.Hash))
+	var toWhitelist []file.FileInfo
+	for _, f := range files {
+		toWhitelist = append(toWhitelist, file.FileInfo{
+			Path: f.Path,
+			Hash: f.Hash,
+		})
 	}
-	if err := writer.Flush(); err != nil {
-		return fmt.Errorf("刷新写入缓冲区失败: %v", err)
+
+	if err := storage.AppendFileToWhitelist(toWhitelist, dataDir, cfg.Storage.FileSystemFile); err != nil {
+		return fmt.Errorf("更新白名单失败: %v", err)
 	}
+
+	logger.Log.Debug("已将可疑文件移入白名单", zap.Int("count", len(toWhitelist)))
 
 	// Todo: 逐个删除条目
-
-	if err := os.Remove(dubiousFile); err != nil && !os.IsNotExist(err) {
+	if err := storage.RemoveDubiousFiles(dataDir, cfg.Storage.DubiousFileListFile, []storage.DubiousFileInfo{}); err != nil {
 		return fmt.Errorf("删除可疑文件列表失败: %v", err)
 	}
 

@@ -223,6 +223,77 @@ func SaveDubiousFiles(files DubiousFileInfo, dataDir string, dubiousFileName str
 	return writer.Flush()
 }
 
+func AppendFileToWhitelist(files []file.FileInfo, dataDir string, fileSystemFile string) error {
+	filePath := filepath.Join(dataDir, fileSystemFile)
+	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("[storage]无法创建或打开文件白名单文件%s: %w", filePath, err)
+	}
+	defer f.Close()
+
+	writer := bufio.NewWriter(f)
+
+	for _, f := range files {
+		line := f.String() + "\n"
+		if _, err := writer.WriteString(line); err != nil {
+			return err
+		}
+	}
+
+	return writer.Flush()
+}
+
+func RemoveDubiousFiles(dataDir string, dubiousFileName string, toKeep []DubiousFileInfo) error {
+	filePath := filepath.Join(dataDir, dubiousFileName)
+	if len(toKeep) == 0 {
+		return os.Remove(filePath)
+	}
+
+	f, err := os.Create(filePath)
+	if err != nil {
+		return fmt.Errorf("[storage]无法创建可疑文件记录文件%s: %w", filePath, err)
+	}
+	defer f.Close()
+
+	writer := bufio.NewWriter(f)
+
+	for _, file := range toKeep {
+		line := fmt.Sprintf("%s:%s:%s\n", file.Path, file.Hash, file.DiscoveredAt)
+		if _, err := writer.WriteString(line); err != nil {
+			return err
+		}
+	}
+
+	return writer.Flush()
+}
+
+func LoadDubiousFiles(dataDir string, dubiousFileName string) ([]DubiousFileInfo, error) {
+	filePath := filepath.Join(dataDir, dubiousFileName)
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("[storage]无法打开可疑文件记录文件%s: %w", filePath, err)
+	}
+	defer f.Close()
+
+	var files []DubiousFileInfo
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.Split(line, ":")
+		if len(parts) >= 3 {
+			files = append(files, DubiousFileInfo{
+				Path:         parts[0],
+				Hash:         parts[1],
+				DiscoveredAt: parts[2],
+			})
+		}
+	}
+	return files, scanner.Err()
+}
+
 func LoadFileSystemWhitelist(dataDir string, fileSystemFile string) (map[string]string, error) {
 	filePath := filepath.Join(dataDir, fileSystemFile)
 	f, err := os.Open(filePath)
