@@ -30,7 +30,7 @@ scanner:
     interval: 300 # seconds
 
 storage:
-  data_dir: "./data"
+  data_dir: "/var/lib/sysmonitord"
   process_system_file: "process_system.data"
   file_system_file: "file_system.data"
   dubious_file_list_file: "dubious_files.data"

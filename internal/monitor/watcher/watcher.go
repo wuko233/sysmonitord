@@ -78,6 +78,11 @@ func (w *Watcher) eventLoop() {
 				return
 			}
 
+			// 忽略不需要监控的路径
+			if w.shouldIgnore(event.Name) {
+				continue
+			}
+
 			// 添加新创建的目录到监听列表
 			if event.Op&fsnotify.Create == fsnotify.Create {
 				info, err := os.Stat(event.Name)
@@ -131,4 +136,36 @@ func (w *Watcher) addPath(path string) {
 
 func (w *Watcher) Errors() <-chan error {
 	return w.fsnWatcher.Errors
+}
+
+func (w *Watcher) shouldIgnore(path string) bool {
+	dataDir := w.cfg.Storage.DataDir
+
+	absDataDir, err := filepath.Abs(dataDir)
+	if err != nil {
+		absDataDir = dataDir
+	}
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		absPath = path
+	}
+
+	if strings.HasPrefix(absPath, absDataDir) {
+		// 忽略数据目录下的指定文件
+		fileSystemName := w.cfg.Storage.FileSystemFile
+		processListName := w.cfg.Storage.ProcessSystemFile
+		dubiousFileName := w.cfg.Storage.DubiousFileListFile
+		dubiousProcessName := w.cfg.Storage.DubiousProcessListFile
+
+		if strings.HasSuffix(absPath, fileSystemName) ||
+			strings.HasSuffix(absPath, processListName) ||
+			strings.HasSuffix(absPath, dubiousFileName) ||
+			strings.HasSuffix(absPath, dubiousProcessName) {
+			logger.Log.Debug("[monitor] 忽略数据目录下的文件", zap.String("path", absPath))
+			return true
+		}
+	}
+
+	return false
 }
