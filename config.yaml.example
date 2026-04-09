@@ -37,10 +37,11 @@ storage:
   dubious_process_list_file: "dubious_processes.data"
 
 notification:
+  interval: 5 # minutes
   email:
     enabled: true
     recipients:
-      - admin@wuko.top
+      -
     smtp:
       server:
       port: 465

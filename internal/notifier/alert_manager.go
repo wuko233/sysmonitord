@@ -34,7 +34,7 @@ func NewAlerter(cfg config.NotificationConfig) *Alerter {
 		mailer:    mail.NewMailer(cfg.Email),
 		eventChan: make(chan AlertEvent, 100),
 		buffer:    make([]AlertEvent, 0),
-		interval:  30 * time.Second, // Todo: 可配置化
+		interval:  time.Duration(cfg.Interval) * time.Minute,
 	}
 }
 

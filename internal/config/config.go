@@ -9,7 +9,8 @@ type Config struct {
 }
 
 type NotificationConfig struct {
-	Email EmailConfig `yaml:"email"`
+	Email    EmailConfig `yaml:"email"`
+	Interval int         `yaml:"interval"`
 }
 
 type EmailConfig struct {
