@@ -38,6 +38,7 @@ scanner:
       - /var/spool
       - /var/lib/docker
       - /var/lib/containerd
+      - /var/lib/systemd
       
       # ========== 内核模块==========
       - /usr/lib/modules
