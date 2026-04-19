@@ -56,19 +56,26 @@ func (s *Scanner) Scan() ([]FileInfo, error) {
 	var allFiles []FileInfo
 	hashCfg, _ := s.cfg.GetHashConfig()
 
-	bar := progressbar.NewOptions(len(allPaths),
-		progressbar.OptionSetDescription("[scan]计算文件哈希"),
-		progressbar.OptionSetWriter(os.Stderr),
-		progressbar.OptionShowCount(),
-		progressbar.OptionShowIts(),
-		progressbar.OptionSetItsString("files"),
-		progressbar.OptionOnCompletion(func() {
-			logger.Log.Info("[scan]文件哈希计算完成")
-		}),
-	)
+	var bar *progressbar.ProgressBar
+	if isInteractiveTerminal() {
+		bar = progressbar.NewOptions(len(allPaths),
+			progressbar.OptionSetDescription("[scan]计算文件哈希"),
+			progressbar.OptionSetWriter(os.Stderr),
+			progressbar.OptionShowCount(),
+			progressbar.OptionShowIts(),
+			progressbar.OptionSetItsString("files"),
+			progressbar.OptionOnCompletion(func() {
+				logger.Log.Info("[scan]文件哈希计算完成")
+			}),
+		)
+	} else {
+		logger.Log.Info("[scan]开始计算文件哈希", zap.Int("total_files", len(allPaths)))
+	}
 
 	for _, path := range allPaths {
-		bar.Add(1)
+		if bar != nil {
+			bar.Add(1)
+		}
 
 		info, err := os.Stat(path)
 		if err != nil {
@@ -165,6 +172,15 @@ func (s *Scanner) collectPathsFunc(result *[]string) fs.WalkDirFunc {
 		*result = append(*result, path)
 		return nil
 	}
+}
+
+func isInteractiveTerminal() bool {
+	fileInfo, err := os.Stderr.Stat()
+	if err != nil {
+		return false
+	}
+
+	return (fileInfo.Mode() & os.ModeCharDevice) != 0
 }
 
 func (f FileInfo) String() string {

@@ -21,8 +21,64 @@ scanner:
     include_paths:
       - /
     exclude_paths:
+      # ========== 虚拟/临时文件系统==========
       - /proc
       - /sys
+      - /dev
+      - /tmp
+      - /var/tmp
+      - /run
+      - /mnt
+      - /media
+      
+      # ========== 系统高频写入目录==========
+      - /var/log
+      - /var/cache
+      - /var/mail
+      - /var/spool
+      - /var/lib/docker
+      - /var/lib/containerd
+      
+      # ========== 内核模块==========
+      - /usr/lib/modules
+      - /lib/modules
+      - /usr/src
+      
+      # ========== 应用缓存和构建目录==========
+      # 通用
+      - "**/node_modules"
+      - "**/.git"
+      - "**/.cache"
+      - "**/build"
+      - "**/dist"
+      - "**/unpackage"
+      - "**/vendor"
+      - "**/__pycache__"
+      - "**/.idea"
+      - "**/.vscode"
+      
+      # ========== Web 应用特定==========
+      - "**/cache"
+      - "**/logs"
+      - "**/tmp"
+      - "**/temp"
+      - "**/uploads/tmp"
+      
+      # ========== 用户缓存目录 ==========
+      - /root/.cache
+      - /root/.npm
+      - /root/.local
+      - /home/*/.cache
+      - /home/*/.npm
+      - /home/*/.local
+      - /home/*/.gradle
+      - /home/*/.m2
+      
+      # ========== 其他高频变化目录 ==========
+      - /var/run
+      - /var/lock
+      - /opt/*/cache
+      - /opt/*/logs
     fast_hash: true
     fast_hash_size: 100MB
     fast_hash_chunk: 2MB
