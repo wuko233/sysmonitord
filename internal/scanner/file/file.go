@@ -162,6 +162,17 @@ func (s *Scanner) collectPathsFunc(result *[]string) fs.WalkDirFunc {
 			return nil
 		}
 
+		info, err := d.Info()
+		if err == nil {
+			if info.Mode()&os.ModeSymlink != 0 {
+				realInfo, err := os.Stat(path)
+				if err == nil && realInfo.IsDir() {
+					logger.Log.Debug("[scan]跳过指向目录的符号链接", zap.String("path", path))
+					return nil
+				}
+			}
+		}
+
 		for _, exclude := range s.cfg.Scanner.File.ExcludePaths {
 			if strings.HasPrefix(path, exclude) {
 				logger.Log.Debug("[scan]跳过路径", zap.String("path", path), zap.String("reason", "匹配排除路径"))
