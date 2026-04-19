@@ -180,8 +180,28 @@ func AppendProcessToWhitelist(procs []process.ProcessInfo, dataDir string, proce
 	return writer.Flush()
 }
 
-func RemoveDubiousProcesses(dataDir string, dubiousProcessFile string, toKeep []DubiousProcessInfo) error {
+func RemoveDubiousProcesses(dataDir string, dubiousProcessFile string, toRemove []DubiousProcessInfo) error {
 	filePath := filepath.Join(dataDir, dubiousProcessFile)
+
+	allProcs, err := LoadDubiousProcesses(dataDir, dubiousProcessFile)
+	if err != nil {
+		return fmt.Errorf("[storage]无法加载可疑进程记录文件%s: %w", filePath, err)
+	}
+
+	toRemoveMap := make(map[string]bool)
+	for _, proc := range toRemove {
+		key := fmt.Sprintf("%s:%s", proc.Name, proc.Path)
+		toRemoveMap[key] = true
+	}
+
+	var toKeep []DubiousProcessInfo
+	for _, proc := range allProcs {
+		key := fmt.Sprintf("%s:%d", proc.Name, proc.PID)
+		if !toRemoveMap[key] {
+			toKeep = append(toKeep, proc)
+		}
+	}
+
 	if len(toKeep) == 0 {
 		return os.Remove(filePath)
 	}
@@ -194,6 +214,11 @@ func RemoveDubiousProcesses(dataDir string, dubiousProcessFile string, toKeep []
 
 	writer := bufio.NewWriter(f)
 
+	header := fmt.Sprintf("# 可疑进程记录 - 最后更新: %s\n", time.Now().Format("2006-01-02 15:04:05"))
+	if _, err := writer.WriteString(header); err != nil {
+		return err
+	}
+
 	for _, proc := range toKeep {
 		line := fmt.Sprintf("%s:%s:%s\n", proc.Name, proc.Path, proc.FileHash)
 		if _, err := writer.WriteString(line); err != nil {
@@ -201,7 +226,15 @@ func RemoveDubiousProcesses(dataDir string, dubiousProcessFile string, toKeep []
 		}
 	}
 
-	return writer.Flush()
+	if err := writer.Flush(); err != nil {
+		return err
+	}
+
+	logger.Log.Debug("[storage]已从可疑进程列表删除条目",
+		zap.Int("deleted", len(toRemove)),
+		zap.Int("remaining", len(toKeep)))
+
+	return nil
 }
 
 func SaveDubiousFiles(files DubiousFileInfo, dataDir string, dubiousFileName string) error {
@@ -243,8 +276,26 @@ func AppendFileToWhitelist(files []file.FileInfo, dataDir string, fileSystemFile
 	return writer.Flush()
 }
 
-func RemoveDubiousFiles(dataDir string, dubiousFileName string, toKeep []DubiousFileInfo) error {
+func RemoveDubiousFiles(dataDir string, dubiousFileName string, toRemove []DubiousFileInfo) error {
 	filePath := filepath.Join(dataDir, dubiousFileName)
+
+	allFiles, err := LoadDubiousFiles(dataDir, dubiousFileName)
+	if err != nil {
+		return fmt.Errorf("[storage]无法加载可疑文件记录文件%s: %w", filePath, err)
+	}
+
+	toRemoveMap := make(map[string]bool)
+	for _, file := range toRemove {
+		toRemoveMap[file.Path] = true
+	}
+
+	var toKeep []DubiousFileInfo
+	for _, file := range allFiles {
+		if !toRemoveMap[file.Path] {
+			toKeep = append(toKeep, file)
+		}
+	}
+
 	if len(toKeep) == 0 {
 		return os.Remove(filePath)
 	}
@@ -257,6 +308,11 @@ func RemoveDubiousFiles(dataDir string, dubiousFileName string, toKeep []Dubious
 
 	writer := bufio.NewWriter(f)
 
+	header := fmt.Sprintf("# 可疑文件记录 - 最后更新: %s\n", time.Now().Format("2006-01-02 15:04:05"))
+	if _, err := writer.WriteString(header); err != nil {
+		return err
+	}
+
 	for _, file := range toKeep {
 		line := fmt.Sprintf("%s:%s:%s\n", file.Path, file.Hash, file.DiscoveredAt)
 		if _, err := writer.WriteString(line); err != nil {
@@ -264,7 +320,15 @@ func RemoveDubiousFiles(dataDir string, dubiousFileName string, toKeep []Dubious
 		}
 	}
 
-	return writer.Flush()
+	if err := writer.Flush(); err != nil {
+		return err
+	}
+
+	logger.Log.Debug("[storage]已从可疑文件列表删除条目",
+		zap.Int("deleted", len(toRemove)),
+		zap.Int("remaining", len(toKeep)))
+
+	return nil
 }
 
 func LoadDubiousFiles(dataDir string, dubiousFileName string) ([]DubiousFileInfo, error) {
