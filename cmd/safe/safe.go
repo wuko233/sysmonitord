@@ -21,9 +21,9 @@ func NewSafeCmd() *cobra.Command {
 		Short: "交互式安全确认，将可疑对象加入白名单",
 		Long:  "查看当前的可疑文件和进程列表，并选择将其移入白名单。",
 		Run: func(cmd *cobra.Command, args []string) {
-			cfg, err := config.LoadConfig("./config.yaml")
-			if err != nil {
-				fmt.Printf("加载配置失败: %v\n", err)
+			cfg, ok := cmd.Context().Value("config").(*config.Config)
+			if !ok {
+				fmt.Println("无法获取配置")
 				os.Exit(1)
 			}
 

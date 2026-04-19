@@ -16,10 +16,9 @@ func NewStatusCmd() *cobra.Command {
 		Short: "显示系统状态",
 		Long:  "显示Sysmonitod的当前状态",
 		Run: func(cmd *cobra.Command, args []string) {
-			cfg, err := config.LoadConfig("./config.yaml")
-
-			if err != nil {
-				fmt.Printf("加载配置失败: %v\n", err)
+			cfg, ok := cmd.Context().Value("config").(*config.Config)
+			if !ok {
+				fmt.Println("无法获取配置")
 				os.Exit(1)
 			}
 
