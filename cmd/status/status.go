@@ -4,10 +4,15 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sysmonitord/internal/config"
+	"sysmonitord/pkg/logger"
+	"time"
 
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 func NewStatusCmd() *cobra.Command {
@@ -35,7 +40,7 @@ func printStatus(cfg *config.Config) {
 	fmt.Println("================")
 
 	// Todo: 显示运行时长
-	runtimeInfo := "N/A"
+	runtimeInfo := getRuntime()
 
 	fmt.Printf("Runtime: %s\n", runtimeInfo)
 	fmt.Printf("Data Directory: %s\n", dataDir)
@@ -86,4 +91,70 @@ func countLines(filePath string) (int, error) {
 	}
 
 	return lineCount, scanner.Err()
+}
+
+func getRuntime() string {
+	cmd := exec.Command("systemctl", "is-active", "sysmonitord")
+	output, err := cmd.Output()
+	if err != nil || strings.TrimSpace(string(output)) != "active" {
+		return "N/A"
+	}
+
+	cmd = exec.Command("systemctl", "show", "sysmonitord", "--property=ActiveEnterTimestamp")
+	output, err = cmd.Output()
+	if err != nil {
+		return "N/A"
+	}
+
+	parts := strings.SplitN(string(output), "=", 2)
+	if len(parts) != 2 {
+		return "N/A"
+	}
+
+	timestampStr := strings.TrimSpace(parts[1])
+	if timestampStr == "" {
+		return "N/A"
+	}
+
+	layouts := []string{
+		"Mon 2006-01-02 15:04:05 MST",
+		"Mon 2006-01-02 15:04:05",
+		"2006-01-02 15:04:05 MST",
+		"2006-01-02 15:04:05",
+		"Mon 2006-01-02 15:04:05 MST 2006",
+	}
+
+	var startTime time.Time
+	var parseErr error
+	for _, layout := range layouts {
+		startTime, parseErr = time.Parse(layout, timestampStr)
+		if parseErr == nil {
+			logger.Log.Debug("时间解析成功", zap.String("layout", layout))
+			break
+		}
+	}
+	if parseErr != nil {
+		return "N/A"
+	}
+
+	if time.Since(startTime) < 0 {
+		return "N/A"
+	}
+
+	runtime := time.Since(startTime)
+
+	days := int(runtime.Hours()) / 24
+	hours := int(runtime.Hours()) % 24
+	minutes := int(runtime.Minutes()) % 60
+	seconds := int(runtime.Seconds()) % 60
+
+	if days > 0 {
+		return fmt.Sprintf("%d天 %d小时 %d分钟 %d秒", days, hours, minutes, seconds)
+	} else if hours > 0 {
+		return fmt.Sprintf("%d小时 %d分钟 %d秒", hours, minutes, seconds)
+	} else if minutes > 0 {
+		return fmt.Sprintf("%d分钟 %d秒", minutes, seconds)
+	} else {
+		return fmt.Sprintf("%d秒", seconds)
+	}
 }
