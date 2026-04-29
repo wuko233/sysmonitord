@@ -23,6 +23,7 @@ type FileDetector struct {
 	mu           sync.RWMutex
 	timer        map[string]*time.Timer
 	debDuration  time.Duration
+	eventChan    chan storage.DubiousFileInfo
 }
 
 func NewFileDetector(cfg *config.Config) (*FileDetector, error) {
@@ -32,6 +33,7 @@ func NewFileDetector(cfg *config.Config) (*FileDetector, error) {
 		timer:        make(map[string]*time.Timer),
 		debDuration:  1 * time.Second,
 		dubiousCache: make(map[string]string),
+		eventChan:    make(chan storage.DubiousFileInfo, 100),
 	}
 
 	if err := d.loadWhiteList(); err != nil {
@@ -163,10 +165,23 @@ func (d *FileDetector) processEvent(eventPath string) {
 			}
 			if err := storage.SaveDubiousFiles(dubiousInfo, d.storageDir, d.cfg.Storage.DubiousFileListFile); err != nil {
 				logger.Log.Error("[monitor] 保存可疑文件信息失败", zap.String("path", eventPath), zap.Error(err))
+				return
 			}
+
+			select {
+			case d.eventChan <- dubiousInfo:
+				logger.Log.Debug("[monitor] 可疑文件事件已发送到事件通道", zap.String("path", eventPath))
+			default:
+				logger.Log.Warn("[monitor] 可疑文件事件通道已满，无法发送事件", zap.String("path", eventPath))
+			}
+
 		} else {
 			d.mu.Unlock()
 			logger.Log.Debug("[monitor] 文件事件已存在于可疑缓存中，忽略重复事件", zap.String("path", eventPath), zap.String("reason", reason), zap.String("hash", curHash))
 		}
 	}
+}
+
+func (d *FileDetector) Events() <-chan storage.DubiousFileInfo {
+	return d.eventChan
 }
