@@ -150,9 +150,11 @@ func (d *FileDetector) processEvent(eventPath string) {
 	if isSuspicious {
 		d.mu.Lock()
 
-		cachedHash, exist := d.dubiousCache[eventPath]
+		// cachedHash, exist := d.dubiousCache[eventPath]
+		_, exist := d.dubiousCache[eventPath]
 
-		if !exist || cachedHash != curHash {
+		if !exist {
+			// if !exist || cachedHash != curHash {
 			d.dubiousCache[eventPath] = curHash
 
 			d.mu.Unlock()
