@@ -104,6 +104,8 @@ func NewStartCmd() *cobra.Command {
 				os.Exit(1)
 			}
 
+			fileEventChan := fileDetector.Events()
+
 			// ====== 启动进程检测定时任务 ======
 			procDetector, err := detector.NewProcessDetector(cfg)
 			if err != nil {
@@ -128,7 +130,7 @@ func NewStartCmd() *cobra.Command {
 				select {
 
 				case event := <-fileMon.Events():
-					logger.Log.Info("文件系统事件",
+					logger.Log.Debug("文件系统事件",
 						zap.String("path", event.Path),
 						zap.String("op", event.Op.String()),
 					)
@@ -138,12 +140,17 @@ func NewStartCmd() *cobra.Command {
 						fileDetector.HandleEvent(event.Path, event.Op.String())
 					}
 
-					// test
+				case fileEvent := <-fileEventChan:
+					logger.Log.Info("可疑文件事件",
+						zap.String("path", fileEvent.Path),
+						zap.String("hash", fileEvent.Hash),
+						zap.String("discovered_at", fileEvent.DiscoveredAt),
+					)
 					alerter.PushAlert(notifier.AlertEvent{
 						Type:    "File",
-						Path:    event.Path,
-						Reason:  event.Op.String(),
-						Details: "To test",
+						Path:    fileEvent.Path,
+						Reason:  "可疑文件事件",
+						Details: fmt.Sprintf("hash=%s, discovered_at=%s", fileEvent.Hash, fileEvent.DiscoveredAt),
 					})
 
 				case procEvents := <-procEventChan:
@@ -155,12 +162,11 @@ func NewStartCmd() *cobra.Command {
 
 					procDetector.HandleDubiousProcesses(procEvents)
 
-					// test
 					alerter.PushAlert(notifier.AlertEvent{
 						Type:    "Process",
 						Path:    procEvents.Path,
 						Reason:  "可疑进程",
-						Details: "To test",
+						Details: fmt.Sprintf("pid=%d, name=%s", procEvents.PID, procEvents.Name),
 					})
 
 				case err := <-fileMon.Errors():
