@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 	"sysmonitord/internal/config"
+	"sysmonitord/internal/event"
 	"sysmonitord/internal/monitor/detector"
 	"sysmonitord/internal/monitor/timer"
 	"sysmonitord/internal/monitor/watcher"
@@ -126,59 +127,87 @@ func NewStartCmd() *cobra.Command {
 			quit := make(chan os.Signal, 1)
 			signal.Notify(quit, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
+			handleEvent := func(e event.Event) {
+				switch e.Type {
+				case event.TypeFileChange:
+					handleFileChange(e, fileDetector)
+				case event.TypeDubiousFile:
+					handleDubiousFile(e, alerter)
+				case event.TypeDubiousProcess:
+					handleDubiousProcess(e, alerter, procDetector)
+				case event.TypeError:
+					handleError(e)
+				case event.TypeSystemStart:
+					handleSystemStart(e)
+				case event.TypeSystemStop:
+					handleSystemStop(e)
+				default:
+					logger.Log.Warn("未知事件类型", zap.String("type", string(e.Type)))
+				}
+			}
+
+			eventCh := make(chan event.Event, 100)
+
+			go func() {
+				for ev := range eventCh {
+					handleEvent(ev)
+				}
+			}()
+
 			for {
 				select {
 
-				case event := <-fileMon.Events():
-					logger.Log.Debug("文件系统事件",
-						zap.String("path", event.Path),
-						zap.String("op", event.Op.String()),
-					)
-
-					if event.FileInfo != nil {
-						logger.Log.Debug("文件详情", zap.Int64("size", event.FileInfo.Size()))
-						fileDetector.HandleEvent(event.Path, event.Op.String())
+				case ev := <-fileMon.Events():
+					eventCh <- event.Event{
+						Time:   time.Now(),
+						Type:   event.TypeFileChange,
+						Source: "FileWatcher",
+						Path:   ev.Path,
+						Detail: fmt.Sprintf("文件事件: %s", ev.Op.String()),
+						Data:   ev.FileInfo,
 					}
 
 				case fileEvent := <-fileEventChan:
-					logger.Log.Info("可疑文件事件",
-						zap.String("path", fileEvent.Path),
-						zap.String("hash", fileEvent.Hash),
-						zap.String("discovered_at", fileEvent.DiscoveredAt),
-					)
-					alerter.PushAlert(notifier.AlertEvent{
-						Type:    "File",
-						Path:    fileEvent.Path,
-						Reason:  "可疑文件事件",
-						Details: fmt.Sprintf("hash=%s, discovered_at=%s", fileEvent.Hash, fileEvent.DiscoveredAt),
-					})
+					eventCh <- event.Event{
+						Time:   time.Now(),
+						Type:   event.TypeDubiousFile,
+						Source: "FileDetector",
+						Path:   fileEvent.Path,
+						Reason: "可疑文件事件",
+						Detail: fmt.Sprintf("hash=%s, discovered_at=%s", fileEvent.Hash, fileEvent.DiscoveredAt),
+						Data:   fileEvent,
+					}
 
 				case procEvents := <-procEventChan:
-					logger.Log.Info("可疑进程事件",
-						zap.Int32("pid", procEvents.PID),
-						zap.String("name", procEvents.Name),
-						zap.String("path", procEvents.Path),
-					)
-
-					procDetector.HandleDubiousProcesses(procEvents)
-
-					alerter.PushAlert(notifier.AlertEvent{
-						Type:    "Process",
-						Path:    procEvents.Path,
-						Reason:  "可疑进程",
-						Details: fmt.Sprintf("pid=%d, name=%s", procEvents.PID, procEvents.Name),
-					})
+					eventCh <- event.Event{
+						Time:   time.Now(),
+						Type:   event.TypeDubiousProcess,
+						Source: "ProcessDetector",
+						PID:    procEvents.PID,
+						Name:   procEvents.Name,
+						Path:   procEvents.Path,
+						Reason: "可疑进程事件",
+						Detail: fmt.Sprintf("pid=%d, name=%s, path=%s", procEvents.PID, procEvents.Name, procEvents.Path),
+						Data:   procEvents,
+					}
 
 				case err := <-fileMon.Errors():
-					logger.Log.Error("文件监听错误", zap.Error(err))
+					eventCh <- event.Event{
+						Time:   time.Now(),
+						Type:   event.TypeError,
+						Source: "FileWatcher",
+						Reason: "文件监听错误",
+						Err:    err,
+					}
 
 				case <-quit:
-					logger.Log.Info("正在停止系统监控守护服务...")
-					fileMon.Stop()
-					procScheduler.Stop()
-					logger.Log.Info("系统监控守护服务已停止")
-					return
-
+					eventCh <- event.Event{
+						Time:   time.Now(),
+						Type:   event.TypeSystemStop,
+						Source: "System",
+						Reason: "系统停止",
+						Detail: "收到系统停止信号，正在关闭服务...",
+					}
 				}
 			}
 
