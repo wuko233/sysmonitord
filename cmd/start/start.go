@@ -208,6 +208,12 @@ func NewStartCmd() *cobra.Command {
 						Reason: "系统停止",
 						Detail: "收到系统停止信号，正在关闭服务...",
 					}
+
+					logger.Log.Info("正在停止系统监控组件...")
+					procScheduler.Stop()
+					fileMon.Stop()
+					logger.Log.Info("系统监控守护服务已停止")
+					return
 				}
 			}
 
