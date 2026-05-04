@@ -31,7 +31,7 @@ func NewFileDetector(cfg *config.Config) (*FileDetector, error) {
 		cfg:          cfg,
 		storageDir:   cfg.Storage.DataDir,
 		timer:        make(map[string]*time.Timer),
-		debDuration:  1 * time.Second,
+		debDuration:  5 * time.Second, // 抖动时间
 		dubiousCache: make(map[string]string),
 		eventChan:    make(chan storage.DubiousFileInfo, 100),
 	}
