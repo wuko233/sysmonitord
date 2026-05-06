@@ -13,6 +13,7 @@ import (
 	"sysmonitord/internal/notifier"
 	"sysmonitord/internal/scanner/file"
 	"sysmonitord/internal/scanner/process"
+	"sysmonitord/internal/script"
 	"sysmonitord/internal/storage"
 	"sysmonitord/pkg/logger"
 	"time"
@@ -122,12 +123,39 @@ func NewStartCmd() *cobra.Command {
 			alerter := notifier.NewAlerter(cfg.Notification)
 			alerter.Start()
 
+			// ====== 初始化脚本管理器 ======
+			scriptManager := script.NewManager(cfg.Script)
+			if scriptManager.Enabled() {
+				logger.Log.Debug("脚本系统已启用",
+					zap.String("script_dir", cfg.Script.Dir),
+					zap.Int("event_count", len(cfg.Script.Events)),
+				)
+			}
+
 			logger.Log.Info("系统监控守护服务已启动，正在监控系统变化...")
 
 			quit := make(chan os.Signal, 1)
 			signal.Notify(quit, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
 			handleEvent := func(e event.Event) {
+				allowDefault := true // 是否默认继续执行
+
+				if scriptManager.Enabled() {
+					scriptEvent := script.FromEvent(&e)
+					executions := scriptManager.ExecuteEvent(scriptEvent)
+					allowDefault = handleScriptExecutions(executions)
+				}
+
+				if !allowDefault {
+					logger.Log.Debug("脚本已阻止默认事件处理流程",
+						zap.String("event_type", string(e.Type)),
+						zap.String("source", e.Source),
+						zap.String("path", e.Path),
+						zap.String("name", e.Name),
+					)
+					return
+				}
+
 				switch e.Type {
 				case event.TypeFileChange:
 					handleFileChange(e, fileDetector)
@@ -153,6 +181,14 @@ func NewStartCmd() *cobra.Command {
 					handleEvent(ev)
 				}
 			}()
+
+			eventCh <- event.Event{
+				Time:   time.Now(),
+				Type:   event.TypeSystemStart,
+				Source: "System",
+				Reason: "系统启动",
+				Detail: "Sysmonitord 监控守护服务已启动",
+			}
 
 			for {
 				select {
