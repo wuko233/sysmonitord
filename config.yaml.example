@@ -104,3 +104,19 @@ notification:
       port: 465
       username:
       password:
+
+script:
+  enabled: true
+  dir: "/etc/sysmonitord/scripts"
+  timeout_ms: 5000
+  events:
+    system_start:
+      - startup.js
+    file_change:
+      - file-change.js
+    dubious_file:
+      - dubious-file.js
+    dubious_process:
+      - dubious-process.js
+    error:
+      - error.js

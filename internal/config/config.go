@@ -6,6 +6,14 @@ type Config struct {
 	Scanner      ScannerConfig      `yaml:"scanner"`
 	Storage      StorageConfig      `yaml:"storage"`
 	Notification NotificationConfig `yaml:"notification"`
+	Script       ScriptConfig       `yaml:"script"`
+}
+
+type ScriptConfig struct {
+	Enabled   bool                `yaml:"enabled"`
+	Dir       string              `yaml:"dir"`
+	TimeoutMS int                 `yaml:"timeout_ms"`
+	Events    map[string][]string `yaml:"events"`
 }
 
 type NotificationConfig struct {
