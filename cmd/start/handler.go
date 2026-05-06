@@ -5,6 +5,7 @@ import (
 	"sysmonitord/internal/event"
 	"sysmonitord/internal/monitor/detector"
 	"sysmonitord/internal/notifier"
+	"sysmonitord/internal/script"
 	"sysmonitord/internal/storage"
 	"sysmonitord/pkg/logger"
 
@@ -81,4 +82,37 @@ func handleSystemStop(e event.Event) {
 		zap.String("source", e.Source),
 		zap.String("detail", e.Detail),
 	)
+}
+
+func handleScriptExecutions(executions []script.ScriptExecution) bool {
+	allowDefault := true
+
+	for _, execution := range executions {
+		if !execution.Success {
+			logger.Log.Warn("脚本执行失败",
+				zap.String("script", execution.Script),
+				zap.String("event_id", execution.EventID),
+				zap.String("event_type", execution.EventType),
+				zap.Int64("cost_ms", execution.CostMS),
+				zap.String("error", execution.Error),
+			)
+			continue
+		}
+
+		logger.Log.Info("脚本执行成功",
+			zap.String("script", execution.Script),
+			zap.String("event_id", execution.EventID),
+			zap.String("event_type", execution.EventType),
+			zap.String("action", execution.Result.Action),
+			zap.String("level", execution.Result.Level),
+			zap.String("message", execution.Result.Message),
+			zap.Bool("allow_default", execution.Result.AllowDefault),
+			zap.Int64("cost_ms", execution.CostMS),
+		)
+
+		if !execution.Result.AllowDefault {
+			allowDefault = false
+		}
+	}
+	return allowDefault
 }
