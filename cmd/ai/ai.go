@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	aiengine "sysmonitord/internal/ai"
 	"sysmonitord/internal/config"
 
 	"github.com/spf13/cobra"
@@ -45,6 +46,29 @@ func NewAICmd() *cobra.Command {
 
 			fmt.Println()
 			fmt.Println("正在读取配置文件并发送到 AI 进行分析...")
+
+			result, err := aiengine.BuildPrompt(aiengine.CollectOptions{
+				IncludePaths: cfg.AI.IncludePaths,
+				MaxFileSize:  cfg.AI.MaxFileSize,
+				MaxTotalSize: cfg.AI.MaxTotalSize,
+			})
+			if err != nil {
+				fmt.Printf("生成 AI Prompt 失败: %v\n", err)
+				os.Exit(1)
+			}
+
+			fmt.Println("已生成 AI Prompt。")
+			fmt.Printf("读取文件数: %d\n", result.FileCount)
+			fmt.Printf("Prompt 字节数: %d\n", result.PromptBytes)
+			if len(result.SkippedFiles) > 0 {
+				fmt.Println()
+				fmt.Println("以下文件未读取成功或被跳过：")
+				for _, skipped := range result.SkippedFiles {
+					fmt.Printf("- %s\n", skipped)
+				}
+			}
+			fmt.Println()
+			fmt.Println("正在调用 AI 接口进行分析...")
 		},
 	}
 
