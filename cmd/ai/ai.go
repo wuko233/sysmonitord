@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"sysmonitord/internal/config"
 
@@ -28,14 +27,60 @@ func NewAICmd() *cobra.Command {
 				return
 			}
 
-			reportDir := filepath.Join(cfg.Storage.DataDir, "ai_reports")
+			if err := validateAIConfig(cfg.AI); err != nil {
+				fmt.Printf("AI 配置错误: %v\n", err)
+				os.Exit(1)
+			}
+
 			fmt.Println()
-			fmt.Printf("正在分析配置文件并生成 AI 安全建议报告，报告将保存在: %s\n", reportDir)
-			fmt.Println("请稍候...")
+			fmt.Printf("AI 模型: %s\n", cfg.AI.Model)
+			fmt.Printf("AI 接口: %s\n", cfg.AI.APIURL)
+			fmt.Printf("报告目录: %s\n", cfg.AI.ReportDir)
+			fmt.Println()
+			fmt.Println("计划读取的配置路径:")
+
+			for _, path := range cfg.AI.IncludePaths {
+				fmt.Printf("- %s\n", path)
+			}
+
+			fmt.Println()
+			fmt.Println("正在读取配置文件并发送到 AI 进行分析...")
 		},
 	}
 
 	return cmd
+}
+
+func validateAIConfig(cfg config.AIConfig) error {
+	if !cfg.Enabled {
+		return fmt.Errorf("AI 功能未启用，请在 config.yaml 中设置 ai.enabled: true")
+	}
+	if strings.TrimSpace(cfg.APIURL) == "" {
+		return fmt.Errorf("ai.api_url 不能为空")
+	}
+	if strings.TrimSpace(cfg.APIKey) == "" {
+		return fmt.Errorf("ai.api_key 不能为空")
+	}
+	if strings.TrimSpace(cfg.Model) == "" {
+		return fmt.Errorf("ai.model 不能为空")
+	}
+	if strings.TrimSpace(cfg.ReportDir) == "" {
+		return fmt.Errorf("ai.report_dir 不能为空")
+	}
+	if cfg.Timeout <= 0 {
+		return fmt.Errorf("ai.timeout 必须大于 0")
+	}
+	if cfg.MaxFileSize <= 0 {
+		return fmt.Errorf("ai.max_file_size 必须大于 0")
+	}
+	if cfg.MaxTotalSize <= 0 {
+		return fmt.Errorf("ai.max_total_size 必须大于 0")
+	}
+	if len(cfg.IncludePaths) == 0 {
+		return fmt.Errorf("ai.include_paths 至少需要配置一个路径")
+	}
+
+	return nil
 }
 
 func confirmAIRisks() bool {

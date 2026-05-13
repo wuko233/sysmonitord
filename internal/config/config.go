@@ -7,6 +7,19 @@ type Config struct {
 	Storage      StorageConfig      `yaml:"storage"`
 	Notification NotificationConfig `yaml:"notification"`
 	Script       ScriptConfig       `yaml:"script"`
+	AI           AIConfig           `yaml:"ai"`
+}
+
+type AIConfig struct {
+	Enabled      bool     `yaml:"enabled"`
+	APIURL       string   `yaml:"api_url"`
+	APIKey       string   `yaml:"api_key"`
+	Model        string   `yaml:"model"`
+	Timeout      int      `yaml:"timeout"`
+	ReportDir    string   `yaml:"report_dir"`
+	MaxFileSize  int64    `yaml:"max_file_size"`
+	MaxTotalSize int64    `yaml:"max_total_size"`
+	IncludePaths []string `yaml:"include_paths"`
 }
 
 type ScriptConfig struct {

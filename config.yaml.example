@@ -92,7 +92,6 @@ storage:
   file_system_file: "file_system.data"
   dubious_file_list_file: "dubious_files.data"
   dubious_process_list_file: "dubious_processes.data"
-  ai_reports: "ai_reports.md"
 
 notification:
   interval: 5 # minutes
@@ -121,3 +120,28 @@ script:
       - dubious-process.js
     error:
       - error.js
+
+ai:
+  enabled: true
+  api_url: "https://api.openai.com/v1/chat/completions"
+  api_key: "${OPENAI_API_KEY}"
+  model: "gpt-4o-mini"
+  timeout: 120
+  report_dir: "/var/lib/sysmonitord/reports"
+  # 单个配置文件最大读取字节数，默认示例为 200KB
+  max_file_size: 204800
+  # 本次 AI 分析最大总读取字节数，默认示例为 2MB
+  max_total_size: 2097152
+  # 本功能会将以下路径和文件内容明文发送给 AI
+  include_paths:
+    - /etc/ssh/sshd_config
+    - /etc/sudoers
+    - /etc/passwd
+    - /etc/group
+    - /etc/login.defs
+    - /etc/security/limits.conf
+    - /etc/sysctl.conf
+    - /etc/nginx/
+    - /etc/mysql/
+    - /etc/redis/
+    - /etc/docker/daemon.json
