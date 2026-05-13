@@ -92,6 +92,7 @@ storage:
   file_system_file: "file_system.data"
   dubious_file_list_file: "dubious_files.data"
   dubious_process_list_file: "dubious_processes.data"
+  ai_reports: "ai_reports.md"
 
 notification:
   interval: 5 # minutes
