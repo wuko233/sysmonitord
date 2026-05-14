@@ -69,6 +69,31 @@ func NewAICmd() *cobra.Command {
 			}
 			fmt.Println()
 			fmt.Println("正在调用 AI 接口进行分析...")
+
+			client, err := aiengine.NewClient(aiengine.ClientConfig{
+				APIURL:  cfg.AI.APIURL,
+				APIKey:  cfg.AI.APIKey,
+				Model:   cfg.AI.Model,
+				Timeout: cfg.AI.Timeout,
+			})
+			if err != nil {
+				fmt.Printf("创建 AI 客户端失败: %v\n", err)
+				os.Exit(1)
+			}
+
+			analysis, err := client.Analyze(result.Prompt)
+			if err != nil {
+				fmt.Printf("AI 分析失败: %v\n", err)
+				os.Exit(1)
+			}
+
+			reportPath, err := aiengine.SaveReport(cfg.AI.ReportDir, analysis)
+			if err != nil {
+				fmt.Printf("保存 AI 报告失败: %v\n", err)
+				os.Exit(1)
+			}
+
+			fmt.Printf("AI 分析完成，报告已保存到: %s\n", reportPath)
 		},
 	}
 
