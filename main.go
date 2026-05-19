@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sysmonitord/cmd/ai"
 	"sysmonitord/cmd/safe"
 	"sysmonitord/cmd/start"
 	"sysmonitord/cmd/status"
@@ -53,6 +54,7 @@ func main() {
 	rootCmd.AddCommand(version.NewVersionCmd())
 	rootCmd.AddCommand(status.NewStatusCmd())
 	rootCmd.AddCommand(safe.NewSafeCmd())
+	rootCmd.AddCommand(ai.NewAICmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		logger.Log.Error("命令执行失败", zap.Error(err))

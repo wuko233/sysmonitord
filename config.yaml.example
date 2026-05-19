@@ -120,3 +120,65 @@ script:
       - dubious-process.js
     error:
       - error.js
+
+ai:
+  enabled: true
+  api_url: "https://api.openai.com/v1/chat/completions"
+  api_key: "${OPENAI_API_KEY}"
+  model: "gpt-4o-mini"
+  timeout: 120
+  report_dir: "/var/lib/sysmonitord/reports"
+  # 单个配置文件最大读取字节数，默认示例为 200KB
+  max_file_size: 204800
+  # 本次 AI 分析最大总读取字节数，默认示例为 2MB
+  max_total_size: 2097152
+  # 本功能会将以下路径和文件内容明文发送给 AI
+  include_paths:
+    # 系统基础配置
+    - /etc/ssh/sshd_config
+    - /etc/sudoers
+    - /etc/passwd
+    - /etc/group
+    - /etc/login.defs
+    - /etc/security/limits.conf
+    - /etc/sysctl.conf
+    # Nginx
+    - /etc/nginx/nginx.conf
+    - /etc/nginx/conf.d/default.conf
+    # Debian/Ubuntu 额外关注：
+    - /etc/nginx/sites-available/default
+    # Node.js
+    # 注：Node.js 本身无系统级主配置，主要关注 npm 全局配置与运行环境
+    - /etc/npmrc
+    - /usr/local/etc/npmrc
+    - /etc/profile.d/nodejs.sh
+    # Java (OpenJDK/JRE)
+    # 注：不同 JDK 版本和安装方式路径差异较大，建议根据实际 JAVA_HOME 调整
+    - /etc/java/java.conf
+    - /etc/profile.d/java.sh
+    - /usr/lib/jvm/default-java/jre/lib/security/java.security
+    - /usr/lib/jvm/default-java/lib/security/java.security
+    # PHP
+    # RHEL/CentOS 系列：
+    - /etc/php.ini
+    - /etc/php-fpm.conf
+    - /etc/php-fpm.d/www.conf
+    # Debian/Ubuntu 系列（请将 8.2 替换为实际版本号，如 7.4、8.1、8.3）：
+    - /etc/php/8.2/fpm/php.ini
+    - /etc/php/8.2/cli/php.ini
+    - /etc/php/8.2/fpm/pool.d/www.conf
+    # PostgreSQL
+    # RHEL/CentOS/Rocky 默认数据目录：
+    - /var/lib/pgsql/data/postgresql.conf
+    - /var/lib/pgsql/data/pg_hba.conf
+    # Debian/Ubuntu 系列（请将 16 替换为实际主版本号，如 14、15）：
+    - /etc/postgresql/16/main/postgresql.conf
+    - /etc/postgresql/16/main/pg_hba.conf
+    # MySQL / MariaDB
+    # RHEL/CentOS/通用：
+    - /etc/my.cnf
+    - /etc/my.cnf.d/server.cnf        # MariaDB
+    # Debian/Ubuntu：
+    - /etc/mysql/my.cnf
+    - /etc/mysql/mysql.conf.d/mysqld.cnf
+    - /etc/mysql/conf.d/mysql.cnf
