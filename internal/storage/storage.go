@@ -386,3 +386,12 @@ func LoadFileSystemWhitelist(dataDir string, fileSystemFile string) (map[string]
 func GetFileInfo(path string) (os.FileInfo, error) {
 	return os.Stat(path)
 }
+
+func DataFileExists(dataDir string, fileName string) bool {
+	filePath := filepath.Join(dataDir, fileName)
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return false
+	}
+	return !info.IsDir() && info.Size() > 0
+}
