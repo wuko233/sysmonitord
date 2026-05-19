@@ -20,8 +20,13 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("无法读取配置文件： %w", err)
 	}
 
+	expandedData, err := expandEnvStrict(string(data))
+	if err != nil {
+		return nil, fmt.Errorf("无法展开环境变量： %w", err)
+	}
+
 	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	if err := yaml.Unmarshal([]byte(expandedData), &cfg); err != nil {
 		return nil, fmt.Errorf("无法解析配置文件： %w", err)
 	}
 
@@ -43,6 +48,28 @@ func LoadConfig(path string) (*Config, error) {
 	)
 
 	return &cfg, nil
+}
+
+func expandEnvStrict(content string) (string, error) {
+	envPattern := regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+	missingVars := make([]string, 0)
+	expanded := envPattern.ReplaceAllStringFunc(content, func(match string) string {
+		parts := envPattern.FindStringSubmatch(match)
+		if len(parts) != 2 {
+			return match
+		}
+		envName := parts[1]
+		envValue, ok := os.LookupEnv(envName)
+		if !ok {
+			missingVars = append(missingVars, envName)
+			return ""
+		}
+		return envValue
+	})
+	if len(missingVars) > 0 {
+		return "", fmt.Errorf("配置文件引用了未设置的环境变量: %s", strings.Join(missingVars, ", "))
+	}
+	return expanded, nil
 }
 
 func ParseSize(sizeStr string) (int64, error) {

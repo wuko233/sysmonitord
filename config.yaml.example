@@ -100,10 +100,10 @@ notification:
     recipients:
       -
     smtp:
-      server:
+      server: smtp.example.com
       port: 465
-      username:
-      password:
+      username: sysmonitord@example.com
+      password: "${SYSMONITORD_SMTP_PASSWORD}"
 
 script:
   enabled: true
@@ -124,7 +124,7 @@ script:
 ai:
   enabled: true
   api_url: "https://api.openai.com/v1/chat/completions"
-  api_key: "${OPENAI_API_KEY}"
+  api_key: "${SYSMONITORD_AI_API_KEY}"
   model: "gpt-4o-mini"
   timeout: 120
   report_dir: "/var/lib/sysmonitord/reports"
