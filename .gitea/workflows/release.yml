@@ -1,0 +1,99 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+      - 'V[0-9]*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Build amd64
+        run: make build VERSION=${{ gitea.ref_name }}
+        env:
+          CGO_ENABLED: 0
+
+      - name: Build arm64
+        run: make build-arm64 VERSION=${{ gitea.ref_name }}
+        env:
+          CGO_ENABLED: 0
+
+      - name: Package
+        run: |
+          mkdir -p release
+          tar czf "release/sysmonitord-${{ gitea.ref_name }}-linux-amd64.tar.gz" -C dist sysmonitord
+          tar czf "release/sysmonitord-${{ gitea.ref_name }}-linux-arm64.tar.gz" -C dist sysmonitord-arm64
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ gitea.ref_name }}
+          path: release/*
+
+      - name: Create Gitea Release
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          SERVER_URL: ${{ gitea.server_url }}
+          REPO: ${{ gitea.repository }}
+          TAG: ${{ gitea.ref_name }}
+        run: |
+          set -e
+          API_URL="${SERVER_URL}/api/v1/repos/${REPO}"
+
+          parse_id() {
+            if command -v python3 >/dev/null 2>&1; then
+              python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id',''))"
+            else
+              grep -o '"id":[0-9]*' | head -1 | cut -d: -f2
+            fi
+          }
+
+          # 尝试获取已存在的 release
+          HTTP_CODE=$(curl -s -o /tmp/existing_release.json -w "%{http_code}" \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            "${API_URL}/releases/tags/${TAG}")
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            RELEASE_ID=$(parse_id < /tmp/existing_release.json)
+            echo "Found existing release '${TAG}' with ID: ${RELEASE_ID}"
+          else
+            echo "Creating release '${TAG}'..."
+            HTTP_CODE=$(curl -s -o /tmp/new_release.json -w "%{http_code}" \
+              -X POST \
+              -H "Authorization: token ${GITEA_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"body\":\"Auto release for ${TAG}\"}" \
+              "${API_URL}/releases")
+            if [ "$HTTP_CODE" != "201" ] && [ "$HTTP_CODE" != "200" ]; then
+              echo "Failed to create release: HTTP ${HTTP_CODE}"
+              cat /tmp/new_release.json
+              exit 1
+            fi
+            RELEASE_ID=$(parse_id < /tmp/new_release.json)
+            echo "Created release '${TAG}' with ID: ${RELEASE_ID}"
+          fi
+
+          # 上传附件
+          for file in release/*; do
+            [ -f "$file" ] || continue
+            filename=$(basename "$file")
+            echo "Uploading ${filename}..."
+            curl -s -X POST \
+              -H "Authorization: token ${GITEA_TOKEN}" \
+              -F "attachment=@${file}" \
+              "${API_URL}/releases/${RELEASE_ID}/assets?name=${filename}"
+            echo ""
+          done
+          echo "Release '${TAG}' published successfully!"
