@@ -13,13 +13,31 @@ build:
 	@echo "开始编译 $(APP_NAME) (amd64) 版本: $(VERSION)"
 	@mkdir -p dist
 	go build $(LDFLAGS) -o dist/$(APP_NAME) main.go
+	@echo "正在打包 amd64 发布包..."
+	@mkdir -p dist/pkg-tmp/$(APP_NAME)
+	@cp dist/$(APP_NAME) dist/pkg-tmp/$(APP_NAME)/
+	@cp scripts/sysmonitord.service dist/pkg-tmp/$(APP_NAME)/
+	@cp config.yaml.example dist/pkg-tmp/$(APP_NAME)/
+	@mkdir -p release
+	@cd dist/pkg-tmp && tar czf ../../release/$(APP_NAME)-$(VERSION)-linux-amd64.tar.gz $(APP_NAME)
+	@rm -rf dist/pkg-tmp
 	@echo "编译完成: dist/$(APP_NAME)"
+	@echo "发布包: release/$(APP_NAME)-$(VERSION)-linux-amd64.tar.gz"
 
 build-arm64:
 	@echo "开始编译 $(APP_NAME) (arm64) 版本: $(VERSION)"
 	@mkdir -p dist
 	GOARCH=arm64 go build $(LDFLAGS) -o dist/$(APP_NAME)-arm64 main.go
+	@echo "正在打包 arm64 发布包..."
+	@mkdir -p dist/pkg-tmp/$(APP_NAME)
+	@cp dist/$(APP_NAME)-arm64 dist/pkg-tmp/$(APP_NAME)/$(APP_NAME)
+	@cp scripts/sysmonitord.service dist/pkg-tmp/$(APP_NAME)/
+	@cp config.yaml.example dist/pkg-tmp/$(APP_NAME)/
+	@mkdir -p release
+	@cd dist/pkg-tmp && tar czf ../../release/$(APP_NAME)-$(VERSION)-linux-arm64.tar.gz $(APP_NAME)
+	@rm -rf dist/pkg-tmp
 	@echo "编译完成: dist/$(APP_NAME)-arm64"
+	@echo "发布包: release/$(APP_NAME)-$(VERSION)-linux-arm64.tar.gz"
 
 install:
 	@echo "安装 $(APP_NAME) 到/usr/local/bin..."

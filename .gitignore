@@ -25,3 +25,4 @@ sysmonitord.code-workspace
 data/
 config.yaml
 dist/
+release/
