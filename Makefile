@@ -12,7 +12,7 @@ all: build
 build:
 	@echo "开始编译 $(APP_NAME) (amd64) 版本: $(VERSION)"
 	@mkdir -p dist
-	go build $(LDFLAGS) -o dist/$(APP_NAME) main.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o dist/$(APP_NAME) main.go
 	@echo "正在打包 amd64 发布包..."
 	@mkdir -p dist/pkg-tmp/$(APP_NAME)
 	@cp dist/$(APP_NAME) dist/pkg-tmp/$(APP_NAME)/
@@ -27,7 +27,7 @@ build:
 build-arm64:
 	@echo "开始编译 $(APP_NAME) (arm64) 版本: $(VERSION)"
 	@mkdir -p dist
-	GOARCH=arm64 go build $(LDFLAGS) -o dist/$(APP_NAME)-arm64 main.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o dist/$(APP_NAME)-arm64 main.go
 	@echo "正在打包 arm64 发布包..."
 	@mkdir -p dist/pkg-tmp/$(APP_NAME)
 	@cp dist/$(APP_NAME)-arm64 dist/pkg-tmp/$(APP_NAME)/$(APP_NAME)
