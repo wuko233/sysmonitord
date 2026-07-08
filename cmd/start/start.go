@@ -37,8 +37,11 @@ func NewStartCmd() *cobra.Command {
 			}
 
 			logger.Log.Info("配置文件加载成功",
+				zap.String("日志等级", cfg.Log.Level),
 				zap.String("审计服务器地址", fmt.Sprintf("%s:%d", cfg.Audit.Server, cfg.Audit.Port)),
 			)
+
+			logger.SetLogLevel(cfg.Log.Level)
 
 			storageCfg := &storage.Storage{
 				DataDir:           cfg.Storage.DataDir,
