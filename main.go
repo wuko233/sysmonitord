@@ -35,6 +35,8 @@ func main() {
 				} else if _, err := os.Stat("/etc/sysmonitord/config.yaml"); err == nil {
 					cfgFile = "/etc/sysmonitord/config.yaml"
 				}
+
+				fmt.Println("未指定配置文件，使用配置文件:", cfgFile)
 			}
 
 			cfg, err := config.LoadConfig(cfgFile)
