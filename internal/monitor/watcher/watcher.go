@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sysmonitord/internal/config"
+	"sysmonitord/internal/pathmatcher"
 	"sysmonitord/pkg/logger"
 
 	"github.com/fsnotify/fsnotify"
@@ -38,7 +39,9 @@ func NewWatcher(cfg *config.Config) (*Watcher, error) {
 }
 
 func (w *Watcher) Start() {
-	paths := w.cfg.Scanner.File.IncludePaths
+	includePaths := w.cfg.Scanner.File.IncludePaths
+
+	paths := w.getWatchPaths(includePaths)
 
 	for _, path := range paths {
 		if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -52,6 +55,69 @@ func (w *Watcher) Start() {
 	logger.Log.Info("[monitor] 已启用文件监听", zap.Strings("paths", paths))
 
 	go w.eventLoop()
+}
+
+func (w *Watcher) getWatchPaths(includePaths []string) []string {
+	roots := make([]string, 0)
+
+	for _, includePath := range includePaths {
+		root := getRootFromPattern(includePath)
+		if root == "" {
+			continue
+		}
+		roots = append(roots, root)
+	}
+
+	seen := make(map[string]struct{})
+	uniqueRoots := make([]string, 0, len(roots))
+	for _, root := range roots {
+		if _, ok := seen[root]; !ok {
+			seen[root] = struct{}{}
+			uniqueRoots = append(uniqueRoots, root)
+		}
+	}
+
+	roots = uniqueRoots
+
+	return roots
+}
+
+// 路径分类，返回最近根目录
+func getRootFromPattern(pattern string) string {
+	isRelative := strings.HasPrefix(pattern, "."+string(os.PathSeparator))
+
+	pattern = filepath.Clean(pattern)
+
+	if !pathmatcher.HasGlobMeta(pattern) {
+		info, err := os.Stat(pattern)
+		if err == nil {
+			if info.IsDir() {
+				return pattern
+			}
+			return filepath.Dir(pattern)
+		}
+	}
+
+	parts := strings.Split(pattern, string(os.PathSeparator))
+	rootParts := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		if pathmatcher.HasGlobMeta(part) {
+			break
+		}
+		rootParts = append(rootParts, part)
+	}
+
+	root := strings.Join(rootParts, string(os.PathSeparator))
+	if root == "" {
+		root = string(os.PathSeparator)
+	}
+
+	if isRelative {
+		root = "." + string(os.PathSeparator) + root
+	}
+
+	return root
 }
 
 func (w *Watcher) Stop() {
