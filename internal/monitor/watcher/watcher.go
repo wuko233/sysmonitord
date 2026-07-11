@@ -144,24 +144,26 @@ func (w *Watcher) eventLoop() {
 				return
 			}
 
-			// 忽略不需要监控的路径
-			if w.shouldIgnore(event.Name) {
-				continue
-			}
+			eventPath := filepath.Clean(event.Name)
 
-			// 添加新创建的目录到监听列表
+			// 添加新创建的目录到监听列表， 26.7.11 fix: glob方式需要先添加新增目录后再判断是否该被忽略
 			if event.Op&fsnotify.Create == fsnotify.Create {
-				info, err := os.Stat(event.Name)
+				info, err := os.Stat(eventPath)
 				if err == nil && info.IsDir() {
-					w.addPath(event.Name)
+					w.addPath(eventPath)
 				}
 			}
 
-			info, err := os.Stat(event.Name)
+			// 忽略不需要监控的路径
+			if w.shouldIgnore(eventPath) {
+				continue
+			}
+
+			info, err := os.Stat(eventPath)
 			if err != nil {
-				logger.Log.Debug("[monitor] 检测文件删除或获取文件信息失败", zap.String("path", event.Name))
+				logger.Log.Debug("[monitor] 检测文件删除或获取文件信息失败", zap.String("path", eventPath))
 				w.eventChan <- EventMsg{
-					Path:     event.Name,
+					Path:     eventPath,
 					Op:       event.Op,
 					FileInfo: nil,
 				}
@@ -169,7 +171,7 @@ func (w *Watcher) eventLoop() {
 			}
 
 			w.eventChan <- EventMsg{
-				Path:     event.Name,
+				Path:     eventPath,
 				Op:       event.Op,
 				FileInfo: info,
 			}
