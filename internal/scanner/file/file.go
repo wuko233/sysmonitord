@@ -177,7 +177,7 @@ func (s *Scanner) collectPathsFunc(result *[]string) fs.WalkDirFunc {
 			}
 		}
 
-		if pathmatcher.IsPathExcluded(path, s.cfg.Scanner.File.ExcludePaths) {
+		if pathmatcher.IsMatchAnyPath(path, s.cfg.Scanner.File.ExcludePaths) {
 			logger.Log.Debug("[scan]跳过路径", zap.String("path", path), zap.String("reason", "匹配排除路径"))
 			return nil
 		}

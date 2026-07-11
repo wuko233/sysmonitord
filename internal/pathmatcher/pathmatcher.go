@@ -68,12 +68,11 @@ func MatchPath(pattern string, path string) bool {
 	return pattern == path || strings.HasPrefix(path, pattern+string(filepath.Separator))
 }
 
-func IsPathExcluded(path string, excludePatterns []string) bool {
-	for _, pattern := range excludePatterns {
+func IsMatchAnyPath(path string, patterns []string) bool {
+	for _, pattern := range patterns {
 		if MatchPath(pattern, path) {
 			return true
 		}
 	}
-
 	return false
 }
