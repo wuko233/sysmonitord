@@ -181,25 +181,32 @@ func (w *Watcher) eventLoop() {
 }
 
 func (w *Watcher) addPath(path string) {
-	filepath.WalkDir(path, func(subPath string, d os.DirEntry, err error) error {
+	err := filepath.WalkDir(path, func(subPath string, d os.DirEntry, err error) error {
 		if err != nil {
-			return err
+			logger.Log.Debug("[monitor] 遍历监听路径失败", zap.String("path", subPath), zap.Error(err))
+			return nil
 		}
 
-		if d.IsDir() {
-			for _, ignorePath := range w.cfg.Scanner.File.ExcludePaths {
-				if strings.HasPrefix(subPath, ignorePath) {
-					return filepath.SkipDir
-				}
-			}
+		if !d.IsDir() {
+			return nil
+		}
 
-			if err := w.fsnWatcher.Add(subPath); err != nil {
-				logger.Log.Error("[monitor] 添加监听失败", zap.String("path", subPath), zap.Error(err))
-			}
+		if w.shouldIgnore(subPath) {
+			logger.Log.Debug("[monitor] 忽略路径", zap.String("path", subPath), zap.String("reason", "匹配排除路径或不匹配包含路径"))
+			return filepath.SkipDir
+		}
+
+		if err := w.fsnWatcher.Add(subPath); err != nil {
+			logger.Log.Error("[monitor] 添加监听路径失败", zap.String("path", subPath), zap.Error(err))
+		} else {
+			logger.Log.Debug("[monitor] 添加监听路径", zap.String("path", subPath))
 		}
 
 		return nil
 	})
+	if err != nil {
+		logger.Log.Error("[monitor] 添加监听路径失败", zap.String("path", path), zap.Error(err))
+	}
 }
 
 func (w *Watcher) Errors() <-chan error {
@@ -207,6 +214,25 @@ func (w *Watcher) Errors() <-chan error {
 }
 
 func (w *Watcher) shouldIgnore(path string) bool {
+	if w.isStorgeFile(path) {
+		return true
+	}
+
+	if pathmatcher.IsMatchAnyPath(path, w.cfg.Scanner.File.ExcludePaths) {
+		logger.Log.Debug("[monitor] 忽略路径", zap.String("path", path), zap.String("reason", "匹配排除路径"))
+		return true
+	}
+
+	includePaths := w.cfg.Scanner.File.IncludePaths
+	if !pathmatcher.IsMatchAnyPath(path, includePaths) {
+		logger.Log.Debug("[monitor] 忽略路径", zap.String("path", path), zap.String("reason", "不匹配包含路径"))
+		return true
+	}
+
+	return false
+}
+
+func (w *Watcher) isStorgeFile(path string) bool {
 	dataDir := w.cfg.Storage.DataDir
 
 	absDataDir, err := filepath.Abs(dataDir)
@@ -219,7 +245,7 @@ func (w *Watcher) shouldIgnore(path string) bool {
 		absPath = path
 	}
 
-	if strings.HasPrefix(absPath, absDataDir) {
+	if absPath == absDataDir || strings.HasPrefix(absPath, absDataDir+string(os.PathSeparator)) {
 		// 忽略数据目录下的指定文件
 		fileSystemName := w.cfg.Storage.FileSystemFile
 		processListName := w.cfg.Storage.ProcessSystemFile
