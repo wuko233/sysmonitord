@@ -214,7 +214,7 @@ func (w *Watcher) Errors() <-chan error {
 }
 
 func (w *Watcher) shouldIgnore(path string) bool {
-	if w.isStorgeFile(path) {
+	if w.isStorageFile(path) {
 		return true
 	}
 
@@ -225,14 +225,23 @@ func (w *Watcher) shouldIgnore(path string) bool {
 
 	includePaths := w.cfg.Scanner.File.IncludePaths
 	if !pathmatcher.IsMatchAnyPath(path, includePaths) {
-		logger.Log.Debug("[monitor] 忽略路径", zap.String("path", path), zap.String("reason", "不匹配包含路径"))
-		return true
+		if info, err := os.Stat(path); err == nil && info.IsDir() {
+			for _, includePath := range includePaths {
+				root := getRootFromPattern(includePath)
+				if root == "" {
+					continue
+				}
+				if path == root || strings.HasPrefix(path, root+string(os.PathSeparator)) {
+					return false
+				}
+			}
+		}
 	}
 
 	return false
 }
 
-func (w *Watcher) isStorgeFile(path string) bool {
+func (w *Watcher) isStorageFile(path string) bool {
 	dataDir := w.cfg.Storage.DataDir
 
 	absDataDir, err := filepath.Abs(dataDir)

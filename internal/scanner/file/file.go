@@ -33,13 +33,16 @@ func NewScanner(cfg *config.Config) *Scanner {
 }
 
 func (s *Scanner) Scan() ([]FileInfo, error) {
-	targetPaths := s.cfg.Scanner.File.IncludePaths
-	if len(targetPaths) == 0 {
-		targetPaths = []string{"/"}
+	includePatterns := s.cfg.Scanner.File.IncludePaths
+	if len(includePatterns) == 0 {
+		includePatterns = []string{"/"}
 	}
 
+	walkRoots := pathmatcher.ExtractWalkRoots(includePatterns)
+	logger.Log.Info("[scan]提取的扫描根目录", zap.Strings("roots", walkRoots))
+
 	var allPaths []string
-	for _, root := range targetPaths {
+	for _, root := range walkRoots {
 		logger.Log.Debug("[scan]检查扫描路径", zap.String("root", root))
 
 		if _, err := os.Stat(root); os.IsNotExist(err) {
@@ -175,6 +178,11 @@ func (s *Scanner) collectPathsFunc(result *[]string) fs.WalkDirFunc {
 					return nil
 				}
 			}
+		}
+
+		if !pathmatcher.IsMatchAnyPath(path, s.cfg.Scanner.File.IncludePaths) {
+			logger.Log.Debug("[scan]跳过路径", zap.String("path", path), zap.String("reason", "不匹配包含路径"))
+			return nil
 		}
 
 		if pathmatcher.IsMatchAnyPath(path, s.cfg.Scanner.File.ExcludePaths) {

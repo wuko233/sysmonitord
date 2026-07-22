@@ -207,9 +207,7 @@ func TestIsPathExcluded(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fmt.Println("测试路径:", tt.path, "排除路径:", tt.excludes)
 			result := IsMatchAnyPath(tt.path, tt.excludes)
-			fmt.Println("结果:", result, "期望:", tt.expected)
 			if result != tt.expected {
 				t.Errorf("isPathExcluded(%q, %v) = %v, want %v",
 					tt.path, tt.excludes, result, tt.expected)

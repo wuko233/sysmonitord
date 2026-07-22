@@ -14,9 +14,15 @@ import (
 func TestGetRootFromPattern(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	os.MkdirAll(tmpDir+"/testdata/subdir", 0755)
-	os.WriteFile(tmpDir+"/testdata/file.txt", []byte("test"), 0644)
-	os.WriteFile(tmpDir+"/testdata/subdir/file.txt", []byte("test"), 0644)
+	if err := os.MkdirAll(tmpDir+"/testdata/subdir", 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(tmpDir+"/testdata/file.txt", []byte("test"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := os.WriteFile(tmpDir+"/testdata/subdir/file.txt", []byte("test"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
 
 	tests := []struct {
 		pattern string
@@ -41,10 +47,15 @@ func TestGetRootFromPattern(t *testing.T) {
 
 func TestGetWatchPaths(t *testing.T) {
 	TestDir := t.TempDir()
-	os.MkdirAll(TestDir+"/testdata/subdir", 0755)
-	os.WriteFile(TestDir+"/testdata/file.txt", []byte("test"), 0644)
-	os.WriteFile(TestDir+"/testdata/subdir/file.txt", []byte("test"), 0644)
-
+	if err := os.MkdirAll(TestDir+"/testdata/subdir", 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(TestDir+"/testdata/file.txt", []byte("test"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := os.WriteFile(TestDir+"/testdata/subdir/file.txt", []byte("test"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
 	tests := []struct {
 		includePaths []string
 		want         []string
@@ -103,8 +114,8 @@ func TestIsStorgeFileIgnoresConfiguredStorageFiles(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := w.isStorgeFile(tt.path); got != tt.want {
-				t.Fatalf("isStorgeFile(%q) = %v, want %v", tt.path, got, tt.want)
+			if got := w.isStorageFile(tt.path); got != tt.want {
+				t.Fatalf("isStorageFile(%q) = %v, want %v", tt.path, got, tt.want)
 			}
 		})
 	}

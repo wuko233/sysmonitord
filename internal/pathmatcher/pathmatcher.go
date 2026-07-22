@@ -56,6 +56,7 @@ func uniqueStrings(input []string) []string {
 // 判断路径是否匹配给定的模式列表， Glob/前缀匹配
 func MatchPath(pattern string, path string) bool {
 	pattern = filepath.Clean(pattern)
+	path = filepath.Clean(path)
 
 	if HasGlobMeta(pattern) {
 		matched, err := doublestar.PathMatch(pattern, path)
@@ -75,4 +76,41 @@ func IsMatchAnyPath(path string, patterns []string) bool {
 		}
 	}
 	return false
+}
+
+// glob提取根目录
+func ExtractRootFromGlob(pattern string) string {
+	pattern = filepath.Clean(pattern)
+
+	if !HasGlobMeta(pattern) {
+		return pattern
+	}
+
+	parts := strings.Split(pattern, string(filepath.Separator))
+
+	for i, part := range parts {
+		if strings.ContainsAny(part, "*?[{") {
+			if i == 0 {
+				return "."
+			}
+
+			return filepath.Join(parts[:i]...)
+		}
+	}
+	return pattern
+}
+
+func ExtractWalkRoots(patterns []string) []string {
+	roots := make([]string, 0)
+	seen := make(map[string]struct{})
+
+	for _, pattern := range patterns {
+		root := ExtractRootFromGlob(pattern)
+		if _, exists := seen[root]; !exists {
+			seen[root] = struct{}{}
+			roots = append(roots, root)
+		}
+	}
+
+	return roots
 }
