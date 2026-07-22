@@ -35,10 +35,15 @@ func main() {
 				} else if _, err := os.Stat("/etc/sysmonitord/config.yaml"); err == nil {
 					cfgFile = "/etc/sysmonitord/config.yaml"
 				}
+
+				if cfgFile != "" {
+					logger.Log.Info("未指定配置文件，使用配置文件", zap.String("path", cfgFile))
+				}
 			}
 
 			cfg, err := config.LoadConfig(cfgFile)
 			if err != nil {
+				logger.Log.Error("加载配置文件失败", zap.Error(err))
 				return fmt.Errorf("加载配置文件失败: %w", err)
 			}
 

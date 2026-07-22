@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sysmonitord/internal/config"
+	"sysmonitord/internal/pathmatcher"
 	"sysmonitord/pkg/logger"
 
 	"github.com/fsnotify/fsnotify"
@@ -38,7 +39,9 @@ func NewWatcher(cfg *config.Config) (*Watcher, error) {
 }
 
 func (w *Watcher) Start() {
-	paths := w.cfg.Scanner.File.IncludePaths
+	includePaths := w.cfg.Scanner.File.IncludePaths
+
+	paths := w.getWatchPaths(includePaths)
 
 	for _, path := range paths {
 		if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -52,6 +55,69 @@ func (w *Watcher) Start() {
 	logger.Log.Info("[monitor] 已启用文件监听", zap.Strings("paths", paths))
 
 	go w.eventLoop()
+}
+
+func (w *Watcher) getWatchPaths(includePaths []string) []string {
+	roots := make([]string, 0)
+
+	for _, includePath := range includePaths {
+		root := getRootFromPattern(includePath)
+		if root == "" {
+			continue
+		}
+		roots = append(roots, root)
+	}
+
+	seen := make(map[string]struct{})
+	uniqueRoots := make([]string, 0, len(roots))
+	for _, root := range roots {
+		if _, ok := seen[root]; !ok {
+			seen[root] = struct{}{}
+			uniqueRoots = append(uniqueRoots, root)
+		}
+	}
+
+	roots = uniqueRoots
+
+	return roots
+}
+
+// 路径分类，返回最近根目录
+func getRootFromPattern(pattern string) string {
+	isRelative := strings.HasPrefix(pattern, "."+string(os.PathSeparator))
+
+	pattern = filepath.Clean(pattern)
+
+	if !pathmatcher.HasGlobMeta(pattern) {
+		info, err := os.Stat(pattern)
+		if err == nil {
+			if info.IsDir() {
+				return pattern
+			}
+			return filepath.Dir(pattern)
+		}
+	}
+
+	parts := strings.Split(pattern, string(os.PathSeparator))
+	rootParts := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		if pathmatcher.HasGlobMeta(part) {
+			break
+		}
+		rootParts = append(rootParts, part)
+	}
+
+	root := strings.Join(rootParts, string(os.PathSeparator))
+	if root == "" {
+		root = string(os.PathSeparator)
+	}
+
+	if isRelative {
+		root = "." + string(os.PathSeparator) + root
+	}
+
+	return root
 }
 
 func (w *Watcher) Stop() {
@@ -78,24 +144,26 @@ func (w *Watcher) eventLoop() {
 				return
 			}
 
-			// 忽略不需要监控的路径
-			if w.shouldIgnore(event.Name) {
-				continue
-			}
+			eventPath := filepath.Clean(event.Name)
 
-			// 添加新创建的目录到监听列表
+			// 添加新创建的目录到监听列表， 26.7.11 fix: glob方式需要先添加新增目录后再判断是否该被忽略
 			if event.Op&fsnotify.Create == fsnotify.Create {
-				info, err := os.Stat(event.Name)
+				info, err := os.Stat(eventPath)
 				if err == nil && info.IsDir() {
-					w.addPath(event.Name)
+					w.addPath(eventPath)
 				}
 			}
 
-			info, err := os.Stat(event.Name)
+			// 忽略不需要监控的路径
+			if w.shouldIgnore(eventPath) {
+				continue
+			}
+
+			info, err := os.Stat(eventPath)
 			if err != nil {
-				logger.Log.Debug("[monitor] 检测文件删除或获取文件信息失败", zap.String("path", event.Name))
+				logger.Log.Debug("[monitor] 检测文件删除或获取文件信息失败", zap.String("path", eventPath))
 				w.eventChan <- EventMsg{
-					Path:     event.Name,
+					Path:     eventPath,
 					Op:       event.Op,
 					FileInfo: nil,
 				}
@@ -103,7 +171,7 @@ func (w *Watcher) eventLoop() {
 			}
 
 			w.eventChan <- EventMsg{
-				Path:     event.Name,
+				Path:     eventPath,
 				Op:       event.Op,
 				FileInfo: info,
 			}
@@ -113,25 +181,32 @@ func (w *Watcher) eventLoop() {
 }
 
 func (w *Watcher) addPath(path string) {
-	filepath.WalkDir(path, func(subPath string, d os.DirEntry, err error) error {
+	err := filepath.WalkDir(path, func(subPath string, d os.DirEntry, err error) error {
 		if err != nil {
-			return err
+			logger.Log.Debug("[monitor] 遍历监听路径失败", zap.String("path", subPath), zap.Error(err))
+			return nil
 		}
 
-		if d.IsDir() {
-			for _, ignorePath := range w.cfg.Scanner.File.ExcludePaths {
-				if strings.HasPrefix(subPath, ignorePath) {
-					return filepath.SkipDir
-				}
-			}
+		if !d.IsDir() {
+			return nil
+		}
 
-			if err := w.fsnWatcher.Add(subPath); err != nil {
-				logger.Log.Error("[monitor] 添加监听失败", zap.String("path", subPath), zap.Error(err))
-			}
+		if w.shouldIgnore(subPath) {
+			logger.Log.Debug("[monitor] 忽略路径", zap.String("path", subPath), zap.String("reason", "匹配排除路径或不匹配包含路径"))
+			return filepath.SkipDir
+		}
+
+		if err := w.fsnWatcher.Add(subPath); err != nil {
+			logger.Log.Error("[monitor] 添加监听路径失败", zap.String("path", subPath), zap.Error(err))
+		} else {
+			logger.Log.Debug("[monitor] 添加监听路径", zap.String("path", subPath))
 		}
 
 		return nil
 	})
+	if err != nil {
+		logger.Log.Error("[monitor] 添加监听路径失败", zap.String("path", path), zap.Error(err))
+	}
 }
 
 func (w *Watcher) Errors() <-chan error {
@@ -139,6 +214,34 @@ func (w *Watcher) Errors() <-chan error {
 }
 
 func (w *Watcher) shouldIgnore(path string) bool {
+	if w.isStorageFile(path) {
+		return true
+	}
+
+	if pathmatcher.IsMatchAnyPath(path, w.cfg.Scanner.File.ExcludePaths) {
+		logger.Log.Debug("[monitor] 忽略路径", zap.String("path", path), zap.String("reason", "匹配排除路径"))
+		return true
+	}
+
+	includePaths := w.cfg.Scanner.File.IncludePaths
+	if !pathmatcher.IsMatchAnyPath(path, includePaths) {
+		if info, err := os.Stat(path); err == nil && info.IsDir() {
+			for _, includePath := range includePaths {
+				root := getRootFromPattern(includePath)
+				if root == "" {
+					continue
+				}
+				if path == root || strings.HasPrefix(path, root+string(os.PathSeparator)) {
+					return false
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+func (w *Watcher) isStorageFile(path string) bool {
 	dataDir := w.cfg.Storage.DataDir
 
 	absDataDir, err := filepath.Abs(dataDir)
@@ -151,7 +254,7 @@ func (w *Watcher) shouldIgnore(path string) bool {
 		absPath = path
 	}
 
-	if strings.HasPrefix(absPath, absDataDir) {
+	if absPath == absDataDir || strings.HasPrefix(absPath, absDataDir+string(os.PathSeparator)) {
 		// 忽略数据目录下的指定文件
 		fileSystemName := w.cfg.Storage.FileSystemFile
 		processListName := w.cfg.Storage.ProcessSystemFile
